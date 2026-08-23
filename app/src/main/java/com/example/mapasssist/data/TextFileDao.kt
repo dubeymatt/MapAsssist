@@ -1,0 +1,22 @@
+package com.example.mapasssist.data
+
+import androidx.room.*
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface TextFileDao {
+    @Query("SELECT * FROM text_files ORDER BY lastModified DESC")
+    fun getAllTextFiles(): Flow<List<TextFile>>
+
+    @Query("SELECT * FROM text_files WHERE id = :id")
+    suspend fun getTextFileById(id: Int): TextFile?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(textFile: TextFile)
+
+    @Update
+    suspend fun update(textFile: TextFile)
+
+    @Delete
+    suspend fun delete(textFile: TextFile)
+}
