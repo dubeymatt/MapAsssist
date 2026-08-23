@@ -54,7 +54,7 @@ class SecondFragment : Fragment() {
         }
 
         binding.buttonShare.setOnClickListener {
-            saveAndShare()
+            saveFile()
         }
 
         requireActivity().addMenuProvider(object : androidx.core.view.MenuProvider {

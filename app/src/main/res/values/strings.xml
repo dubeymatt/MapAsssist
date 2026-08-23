@@ -1,9 +1,16 @@
 <resources>
-    <string name="app_name">Map Asssist</string>
+    <string name="app_name">Map Assist</string>
+    <string name="add_dnc">Add DNC</string>
+    <string name="dnc_title">DNC files</string>
+    <string name="dnc_subtitle">Keep your do-not-contact lists organised.</string>
+    <string name="empty_dnc_title">No DNC files yet</string>
+    <string name="empty_dnc_body">Create your first list to keep important\ncontact exclusions in one place.</string>
+    <string name="list_view">List view</string>
+    <string name="grid_view">Grid view</string>
     <string name="action_settings">Settings</string>
     <!-- Strings used for fragments for navigation -->
-    <string name="first_fragment_label">First Fragment</string>
-    <string name="second_fragment_label">Second Fragment</string>
+    <string name="first_fragment_label">DNC files</string>
+    <string name="second_fragment_label">Edit DNC</string>
     <string name="next">Next</string>
     <string name="previous">Previous</string>
 

@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.GridLayoutManager
 import com.example.mapasssist.data.TextFileViewModel
 import com.example.mapasssist.databinding.FragmentFirstBinding
 
@@ -37,6 +38,13 @@ class FirstFragment : Fragment() {
         }
         binding.recyclerview.adapter = adapter
         binding.recyclerview.layoutManager = LinearLayoutManager(requireContext())
+
+        binding.viewToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            val grid = checkedId == R.id.grid_view_button
+            binding.recyclerview.layoutManager = if (grid) GridLayoutManager(requireContext(), 2) else LinearLayoutManager(requireContext())
+            adapter.setGridMode(grid)
+        }
 
         viewModel.allTextFiles.observe(viewLifecycleOwner) { files ->
             adapter.submitList(files)

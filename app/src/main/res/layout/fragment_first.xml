@@ -1,30 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    tools:context=".FirstFragment">
-
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerview"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        tools:listitem="@layout/recyclerview_item" />
-
-    <TextView
-        android:id="@+id/empty_view"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="No files yet. Click + to create one."
-        android:visibility="gone"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="match_parent" android:paddingStart="20dp" android:paddingEnd="20dp">
+    <TextView android:id="@+id/page_title" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="@string/dnc_title" android:textAppearance="@style/TextAppearance.MapAssist.Headline" app:layout_constraintEnd_toStartOf="@id/view_toggle" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" />
+    <TextView android:id="@+id/page_subtitle" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="@string/dnc_subtitle" android:textAppearance="@style/TextAppearance.MapAssist.Body" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/page_title" />
+    <com.google.android.material.button.MaterialButtonToggleGroup android:id="@+id/view_toggle" android:layout_width="wrap_content" android:layout_height="48dp" android:checkedButton="@id/list_view_button" app:layout_constraintBottom_toBottomOf="@id/page_title" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="@id/page_title" app:selectionRequired="true" app:singleSelection="true">
+        <com.google.android.material.button.MaterialButton android:id="@+id/list_view_button" style="@style/Widget.Material3.Button.IconButton" android:contentDescription="@string/list_view" app:icon="@drawable/ic_list" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/grid_view_button" style="@style/Widget.Material3.Button.IconButton" android:contentDescription="@string/grid_view" app:icon="@drawable/ic_grid" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+    <androidx.recyclerview.widget.RecyclerView android:id="@+id/recyclerview" android:layout_width="0dp" android:layout_height="0dp" android:layout_marginTop="20dp" android:clipToPadding="false" android:paddingBottom="100dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/page_subtitle" />
+    <LinearLayout android:id="@+id/empty_view" android:layout_width="0dp" android:layout_height="wrap_content" android:gravity="center" android:orientation="vertical" android:visibility="gone" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/page_subtitle">
+        <ImageView android:layout_width="64dp" android:layout_height="64dp" android:contentDescription="@null" android:src="@drawable/ic_document" android:tint="@color/primary" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="@string/empty_dnc_title" android:textAppearance="@style/TextAppearance.MapAssist.EmptyTitle" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:gravity="center" android:text="@string/empty_dnc_body" android:textAppearance="@style/TextAppearance.MapAssist.Body" />
+    </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

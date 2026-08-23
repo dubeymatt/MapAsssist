@@ -1,9 +1,24 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Base.Theme.MapAsssist" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <item name="android:fontFamily">sans</item>
+        <item name="colorPrimary">@color/primary</item>
+        <item name="android:navigationBarColor">@color/surface_container</item>
     </style>
 
     <style name="Theme.MapAsssist" parent="Base.Theme.MapAsssist" />
+
+    <style name="TextAppearance.MapAssist.Toolbar" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textColor">@color/on_surface</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="TextAppearance.MapAssist.Headline" parent="TextAppearance.Material3.HeadlineMedium"><item name="android:textColor">@color/on_surface</item><item name="android:textStyle">bold</item></style>
+    <style name="TextAppearance.MapAssist.Body" parent="TextAppearance.Material3.BodyMedium"><item name="android:textColor">@color/on_surface_variant</item></style>
+    <style name="TextAppearance.MapAssist.EmptyTitle" parent="TextAppearance.Material3.TitleLarge"><item name="android:textColor">@color/on_surface</item><item name="android:textStyle">bold</item></style>
+    <style name="TextAppearance.MapAssist.FileTitle" parent="TextAppearance.Material3.TitleMedium"><item name="android:textColor">@color/on_surface</item></style>
+    <style name="TextAppearance.MapAssist.FilePreview" parent="TextAppearance.Material3.BodyMedium"><item name="android:textColor">@color/on_surface_variant</item></style>
+    <style name="TextAppearance.MapAssist.FileMeta" parent="TextAppearance.Material3.LabelMedium"><item name="android:textColor">@color/on_surface_variant</item></style>
+    <style name="Widget.MapAssist.NavigationBar.ActiveIndicator">
+        <item name="android:color">@color/primary_container</item>
+    </style>
 </resources>

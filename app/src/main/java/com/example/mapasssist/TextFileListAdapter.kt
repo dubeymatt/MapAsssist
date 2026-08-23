@@ -14,8 +14,18 @@ import java.util.*
 class TextFileListAdapter(private val onItemClicked: (TextFile) -> Unit) :
     ListAdapter<TextFile, TextFileListAdapter.TextFileViewHolder>(TextFileComparator()) {
 
+    private var gridMode = false
+
+    fun setGridMode(enabled: Boolean) {
+        if (gridMode == enabled) return
+        gridMode = enabled
+        notifyDataSetChanged()
+    }
+
+    override fun getItemViewType(position: Int): Int = if (gridMode) GRID_VIEW else LIST_VIEW
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TextFileViewHolder {
-        return TextFileViewHolder.create(parent)
+        return TextFileViewHolder.create(parent, viewType)
     }
 
     override fun onBindViewHolder(holder: TextFileViewHolder, position: Int) {
@@ -39,9 +49,9 @@ class TextFileListAdapter(private val onItemClicked: (TextFile) -> Unit) :
         }
 
         companion object {
-            fun create(parent: ViewGroup): TextFileViewHolder {
+            fun create(parent: ViewGroup, viewType: Int): TextFileViewHolder {
                 val view: View = LayoutInflater.from(parent.context)
-                    .inflate(R.layout.recyclerview_item, parent, false)
+                    .inflate(if (viewType == GRID_VIEW) R.layout.recyclerview_grid_item else R.layout.recyclerview_item, parent, false)
                 return TextFileViewHolder(view)
             }
         }
@@ -55,5 +65,10 @@ class TextFileListAdapter(private val onItemClicked: (TextFile) -> Unit) :
         override fun areContentsTheSame(oldItem: TextFile, newItem: TextFile): Boolean {
             return oldItem.title == newItem.title && oldItem.content == newItem.content
         }
+    }
+
+    private companion object {
+        const val LIST_VIEW = 0
+        const val GRID_VIEW = 1
     }
 }
