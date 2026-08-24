@@ -11,6 +11,7 @@
     <style name="TextAppearance.MapAssist.Toolbar" parent="TextAppearance.Material3.TitleLarge">
         <item name="android:textColor">@color/on_surface</item>
         <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.03</item>
     </style>
     <style name="TextAppearance.MapAssist.Headline" parent="TextAppearance.Material3.HeadlineMedium"><item name="android:textColor">@color/on_surface</item><item name="android:textStyle">bold</item></style>
     <style name="TextAppearance.MapAssist.Body" parent="TextAppearance.Material3.BodyMedium"><item name="android:textColor">@color/on_surface_variant</item></style>

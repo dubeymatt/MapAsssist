@@ -5,4 +5,5 @@
     <com.google.android.material.button.MaterialButton android:id="@+id/export_button" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="28dp" android:text="Export DNC spreadsheet" />
     <com.google.android.material.button.MaterialButton android:id="@+id/import_button" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Import and replace DNCs" />
     <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/dark_mode_switch" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:text="Dark mode" />
+    <com.google.android.material.button.MaterialButton android:id="@+id/open_downloads_button" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Open Downloads/Map Assist" />
 </LinearLayout>

@@ -50,6 +50,10 @@ class SettingsFragment : Fragment() {
         val preferences = requireContext().getSharedPreferences("map_assist", 0)
         binding.darkModeSwitch.isChecked = preferences.getBoolean("dark_mode", false)
         binding.darkModeSwitch.setOnCheckedChangeListener { _, enabled -> preferences.edit().putBoolean("dark_mode", enabled).apply(); AppCompatDelegate.setDefaultNightMode(if (enabled) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO) }
+        binding.openDownloadsButton.setOnClickListener {
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(android.net.Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload%2FMap%20Assist"), "vnd.android.document/directory").addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            runCatching { startActivity(intent) }.getOrElse { startActivity(android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT_TREE)) }
+        }
         viewModel.allTextFiles.observe(viewLifecycleOwner) { files = it; binding.exportButton.isEnabled = it.isNotEmpty() }
         binding.exportButton.setOnClickListener { exportFile.launch("map_assist_dncs.csv") }
         binding.importButton.setOnClickListener { importFile.launch(arrayOf("text/csv", "text/comma-separated-values", "application/vnd.ms-excel")) }
