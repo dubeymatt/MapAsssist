@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.navigation.findNavController
 import androidx.navigation.fragment.NavHostFragment
 import com.example.mapasssist.databinding.ActivityMainBinding
@@ -12,13 +13,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppCompatDelegate.setDefaultNightMode(if (getSharedPreferences("map_assist", 0).getBoolean("dark_mode", false)) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
         val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment_content_main) as NavHostFragment
         val navController = navHostFragment.navController
         binding.addFab.setOnClickListener { navController.navigate(R.id.action_FirstFragment_to_SecondFragment) }
-        binding.toolbar.setNavigationOnClickListener { navController.navigateUp() }
+        binding.toolbar.setNavigationOnClickListener {
+            val editor = supportFragmentManager.findFragmentById(R.id.nav_host_fragment_content_main)?.childFragmentManager?.fragments?.filterIsInstance<SecondFragment>()?.firstOrNull()
+            if (editor?.requestNavigateUp() != true) navController.navigateUp()
+        }
         binding.bottomNavigation.selectedItemId = R.id.navigation_dncs
         binding.bottomNavigation.setOnItemSelectedListener { item ->
             when (item.itemId) {

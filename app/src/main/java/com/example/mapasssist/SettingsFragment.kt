@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.appcompat.app.AppCompatDelegate
 import com.example.mapasssist.data.DncEntry
 import com.example.mapasssist.data.DncEntryCodec
 import com.example.mapasssist.data.TextFile
@@ -26,11 +27,11 @@ class SettingsFragment : Fragment() {
         uri ?: return@registerForActivityResult
         requireContext().contentResolver.openOutputStream(uri)?.use { stream ->
             OutputStreamWriter(stream).use { writer ->
-                writer.appendLine("DNC Card (Map No. - Title),Date (MM/YY),Address,Supporting information")
+                writer.appendLine("DNC Card,Date (MM/YY),Address,Supporting information")
                 files.sortedBy { it.mapNo.lowercase() }.forEach { file ->
                     val rows = DncEntryCodec.decode(file.entriesJson).ifEmpty { listOf(DncEntry(supportingInformation = file.content)) }
                     rows.forEachIndexed { index, row ->
-                        writer.appendLine(listOf(if (index == 0) "${file.mapNo} - ${file.title}" else "", row.date.take(5), row.address, row.supportingInformation).joinToString(",") { csv(it) })
+                        writer.appendLine(listOf(if (index == 0) "${file.mapNo} - ${file.title}" else "", normalizeDate(row.date), row.address, row.supportingInformation).joinToString(",") { csv(it) })
                     }
                     writer.appendLine()
                 }
@@ -46,6 +47,9 @@ class SettingsFragment : Fragment() {
     }
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View { _binding = FragmentSettingsBinding.inflate(inflater, container, false); return binding.root }
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        val preferences = requireContext().getSharedPreferences("map_assist", 0)
+        binding.darkModeSwitch.isChecked = preferences.getBoolean("dark_mode", false)
+        binding.darkModeSwitch.setOnCheckedChangeListener { _, enabled -> preferences.edit().putBoolean("dark_mode", enabled).apply(); AppCompatDelegate.setDefaultNightMode(if (enabled) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO) }
         viewModel.allTextFiles.observe(viewLifecycleOwner) { files = it; binding.exportButton.isEnabled = it.isNotEmpty() }
         binding.exportButton.setOnClickListener { exportFile.launch("map_assist_dncs.csv") }
         binding.importButton.setOnClickListener { importFile.launch(arrayOf("text/csv", "text/comma-separated-values", "application/vnd.ms-excel")) }
@@ -64,6 +68,7 @@ class SettingsFragment : Fragment() {
         return grouped.map { (key, rows) -> TextFile(title = key.first, mapNo = key.second, entriesJson = DncEntryCodec.encode(rows)) }
     }
     private fun csv(value: String) = "\"${value.replace("\"", "\"\"")}\""
+    private fun normalizeDate(value: String): String { val match = Regex("(0?[1-9]|1[0-2])[/.-](\\d{2,4})").find(value) ?: return value; return "%02d/%02d".format(match.groupValues[1].toInt(), match.groupValues[2].takeLast(2).toInt()) }
     private fun parseCsvRecords(text: String): List<List<String>> { val records = mutableListOf<List<String>>(); var row = mutableListOf<String>(); val cell = StringBuilder(); var quote = false; var i = 0; while (i < text.length) { val c = text[i]; when { c == '"' && quote && i + 1 < text.length && text[i + 1] == '"' -> { cell.append(c); i++ }; c == '"' -> quote = !quote; c == ',' && !quote -> { row += cell.toString(); cell.clear() }; (c == '\n' || c == '\r') && !quote -> { if (c == '\r' && i + 1 < text.length && text[i + 1] == '\n') i++; row += cell.toString(); cell.clear(); records += row; row = mutableListOf() }; else -> cell.append(c) }; i++ }; if (cell.isNotEmpty() || row.isNotEmpty()) { row += cell.toString(); records += row }; return records }
     override fun onDestroyView() { super.onDestroyView(); _binding = null }
 }

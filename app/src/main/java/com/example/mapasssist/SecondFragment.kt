@@ -12,6 +12,7 @@ import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
+import androidx.activity.OnBackPressedCallback
 import com.example.mapasssist.data.DncEntry
 import com.example.mapasssist.data.DncEntryCodec
 import com.example.mapasssist.data.TextFile
@@ -25,10 +26,12 @@ class SecondFragment : Fragment() {
     private val viewModel: TextFileViewModel by viewModels()
     private var currentTextFile: TextFile? = null
     private val entries = mutableListOf<DncEntry>()
+    private var saved = false
+    private var originalEntries = ""
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View { _binding = FragmentSecondBinding.inflate(inflater, container, false); return binding.root }
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         lateinit var touchHelper: ItemTouchHelper
-        val adapter = DncEntryAdapter(entries) { holder -> touchHelper.startDrag(holder) }
+        val adapter = DncEntryAdapter(entries, { holder -> touchHelper.startDrag(holder) }) { autoSave() }
         binding.entriesRecyclerview.layoutManager = LinearLayoutManager(requireContext())
         binding.entriesRecyclerview.adapter = adapter
         touchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0) {
@@ -45,12 +48,30 @@ class SecondFragment : Fragment() {
                 binding.editTitle.isEnabled = false; binding.editMapNo.isEnabled = false
                 requireActivity().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar).title = "${file.mapNo} - ${file.title}"
                 entries += DncEntryCodec.decode(file.entriesJson).ifEmpty { if (file.content.isNotBlank()) listOf(DncEntry(supportingInformation = file.content)) else emptyList() }
+                originalEntries = DncEntryCodec.encode(entries)
                 adapter.notifyDataSetChanged()
             }
         }
-        binding.addEntryButton.setOnClickListener { adapter.addEntry() }
+        binding.addEntryButton.text = "Add DNC"
+        binding.addEntryButton.setOnClickListener { showAddDialog(adapter) }
         binding.editEntriesButton.setOnClickListener { adapter.editMode = !adapter.editMode }
-        binding.buttonShare.setOnClickListener { save(adapter) }
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (saved || !hasChanges(adapter)) { isEnabled = false; requireActivity().onBackPressedDispatcher.onBackPressed() }
+                else android.app.AlertDialog.Builder(requireContext()).setTitle("Discard unsaved changes?").setMessage("Your changes to this DNC card have not been saved.").setNegativeButton("Keep editing", null).setPositiveButton("Discard") { _, _ -> isEnabled = false; requireActivity().onBackPressedDispatcher.onBackPressed() }.show()
+            }
+        })
+    }
+    private fun showAddDialog(adapter: DncEntryAdapter) {
+        val date = android.widget.EditText(requireContext()).apply { hint = "Date (MM/YY)"; inputType = android.text.InputType.TYPE_CLASS_DATETIME or android.text.InputType.TYPE_DATETIME_VARIATION_DATE; layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f) }
+        val calendar = com.google.android.material.button.MaterialButton(requireContext()).apply { text = "Select…"; textSize = 16f; setOnClickListener { MonthYearPicker.show(requireContext()) { date.setText(it) } } }
+        val dateRow = android.widget.LinearLayout(requireContext()).apply { orientation = android.widget.LinearLayout.HORIZONTAL; addView(date); addView(calendar, android.widget.LinearLayout.LayoutParams(140, 68)) }
+        val address = android.widget.EditText(requireContext()).apply { hint = "Address" }
+        val info = android.widget.EditText(requireContext()).apply { hint = "Supporting information" }
+        val form = android.widget.LinearLayout(requireContext()).apply { orientation = android.widget.LinearLayout.VERTICAL; setPadding(48, 0, 48, 0); addView(dateRow); addView(address); addView(info) }
+        android.app.AlertDialog.Builder(requireContext()).setTitle("Add DNC entry").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Add") { _, _ ->
+            val value = date.text.toString(); if (value.isBlank()) Toast.makeText(requireContext(), "DNC was not added: enter a date", Toast.LENGTH_SHORT).show() else if (!value.matches(Regex("(0[1-9]|1[0-2])/\\d{2}"))) Toast.makeText(requireContext(), "DNC was not added: date must be MM/YY", Toast.LENGTH_SHORT).show() else { entries += DncEntry(value, address.text.toString(), info.text.toString()); adapter.notifyItemInserted(entries.lastIndex); autoSave(); Toast.makeText(requireContext(), "DNC added", Toast.LENGTH_SHORT).show() }
+        }.show()
     }
     private fun save(adapter: DncEntryAdapter) {
         val title = binding.editTitle.text?.toString()?.trim().orEmpty()
@@ -59,7 +80,15 @@ class SecondFragment : Fragment() {
         if (rows.any { it.date.isNotBlank() && !it.date.matches(Regex("(0[1-9]|1[0-2])/\\d{2}")) }) { Toast.makeText(requireContext(), "Use MM/YY for dates", Toast.LENGTH_SHORT).show(); return }
         val file = currentTextFile?.copy(title = title, mapNo = binding.editMapNo.text?.toString()?.trim().orEmpty(), entriesJson = DncEntryCodec.encode(rows), lastModified = System.currentTimeMillis()) ?: TextFile(title = title, mapNo = binding.editMapNo.text?.toString()?.trim().orEmpty(), entriesJson = DncEntryCodec.encode(rows))
         if (file.id == 0) viewModel.insert(file) else viewModel.update(file)
+        saved = true
         findNavController().navigateUp()
     }
+    private fun autoSave() { val file = currentTextFile ?: return; viewModel.update(file.copy(entriesJson = DncEntryCodec.encode(entries), lastModified = System.currentTimeMillis())); saved = true }
+    fun requestNavigateUp(): Boolean {
+        if (saved || !hasChanges(null)) return false
+        android.app.AlertDialog.Builder(requireContext()).setTitle("Discard unsaved changes?").setMessage("Your changes to this DNC card have not been saved.").setNegativeButton("Keep editing", null).setPositiveButton("Discard") { _, _ -> findNavController().navigateUp() }.show()
+        return true
+    }
+    private fun hasChanges(adapter: DncEntryAdapter?): Boolean = entries.isNotEmpty() && DncEntryCodec.encode(entries) != originalEntries
     override fun onDestroyView() { super.onDestroyView(); _binding = null }
 }

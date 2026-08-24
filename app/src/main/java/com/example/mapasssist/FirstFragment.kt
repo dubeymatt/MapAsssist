@@ -37,6 +37,7 @@ class FirstFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         val preferences = requireContext().getSharedPreferences("map_assist", 0)
+        when (preferences.getInt("sort_mode", 1)) { 2 -> sortAlphabetically = true; 3 -> sortNumerically = true }
         val adapter = TextFileListAdapter({ textFile ->
             val bundle = Bundle().apply {
                 putInt("textFileId", textFile.id)
@@ -68,10 +69,11 @@ class FirstFragment : Fragment() {
             PopupMenu(requireContext(), anchor).apply {
                 menu.add(0, 1, 0, "Date edited")
                 menu.add(0, 2, 1, "Alphabetically")
-                menu.add(0, 3, 2, "Numerically by Map No.")
+                menu.add(0, 3, 2, "Numerically")
                 setOnMenuItemClickListener { item ->
                     sortAlphabetically = item.itemId == 2
                     sortNumerically = item.itemId == 3
+                    preferences.edit().putInt("sort_mode", item.itemId).apply()
                     submitSorted(adapter)
                     true
                 }
@@ -96,18 +98,17 @@ class FirstFragment : Fragment() {
                 android.app.AlertDialog.Builder(requireContext()).setTitle("Add DNC Card").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Add") { _, _ -> if (title.text.isNotBlank()) viewModel.insert(com.example.mapasssist.data.TextFile(title = title.text.toString(), mapNo = number.text.toString())) }.show()
             } else {
                 if (currentFiles.isEmpty()) return@setOnClickListener
-                val labels = currentFiles.map { "${it.mapNo} - ${it.title}" }.toTypedArray()
-                android.app.AlertDialog.Builder(requireContext()).setTitle("Add entry to DNC card").setItems(labels) { _, which -> quickAdd(currentFiles[which]) }.show()
+                quickAdd()
             }
         }
     }
 
-    private fun quickAdd(file: com.example.mapasssist.data.TextFile) {
-        val date = EditText(requireContext()).apply { hint = "Date (MM/YY)" }; val address = EditText(requireContext()).apply { hint = "Address" }; val info = EditText(requireContext()).apply { hint = "Supporting information" }
-        val form = android.widget.LinearLayout(requireContext()).apply { orientation = android.widget.LinearLayout.VERTICAL; setPadding(48, 0, 48, 0); addView(date); addView(address); addView(info) }
-        android.app.AlertDialog.Builder(requireContext()).setTitle("Add to ${file.mapNo} - ${file.title}").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Add") { _, _ ->
-            if (date.text.isBlank() || date.text.toString().matches(Regex("(0[1-9]|1[0-2])/\\d{2}"))) { val entries = com.example.mapasssist.data.DncEntryCodec.decode(file.entriesJson).toMutableList(); entries += com.example.mapasssist.data.DncEntry(date.text.toString(), address.text.toString(), info.text.toString()); viewModel.update(file.copy(entriesJson = com.example.mapasssist.data.DncEntryCodec.encode(entries), lastModified = System.currentTimeMillis())) }
-        }.show()
+    private fun quickAdd() {
+        val labels = currentFiles.sortedWith(compareBy<TextFile> { it.mapNo.substringBefore(" ").toIntOrNull() ?: Int.MAX_VALUE }.thenBy { it.mapNo }).map { "${it.mapNo} - ${it.title}" }
+        val picker = android.widget.AutoCompleteTextView(requireContext()).apply { hint = "Search DNC card"; setAdapter(android.widget.ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, labels)); threshold = 1; setOnFocusChangeListener { _, focused -> if (focused) showDropDown() }; addTextChangedListener(object : android.text.TextWatcher { override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit; override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit; override fun afterTextChanged(s: android.text.Editable?) { if (s.isNullOrEmpty()) showDropDown() } }) }
+        val date = EditText(requireContext()).apply { hint = "Date (MM/YY)"; inputType = android.text.InputType.TYPE_CLASS_DATETIME or android.text.InputType.TYPE_DATETIME_VARIATION_DATE; layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f) }; val calendar = com.google.android.material.button.MaterialButton(requireContext()).apply { text = "Select…"; textSize = 16f; setOnClickListener { MonthYearPicker.show(requireContext()) { date.setText(it) } } }; val dateRow = android.widget.LinearLayout(requireContext()).apply { orientation = android.widget.LinearLayout.HORIZONTAL; addView(date); addView(calendar, android.widget.LinearLayout.LayoutParams(140, 68)) }; val address = EditText(requireContext()).apply { hint = "Address" }; val info = EditText(requireContext()).apply { hint = "Supporting information" }
+        val form = android.widget.LinearLayout(requireContext()).apply { orientation = android.widget.LinearLayout.VERTICAL; setPadding(48, 0, 48, 0); addView(picker); addView(dateRow); addView(address); addView(info) }
+        android.app.AlertDialog.Builder(requireContext()).setTitle("Add DNC entry").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Add") { _, _ -> val value = date.text.toString(); val selected = currentFiles.firstOrNull { "${it.mapNo} - ${it.title}" == picker.text.toString() }; if (selected == null) android.widget.Toast.makeText(requireContext(), "DNC was not added: select a card", android.widget.Toast.LENGTH_SHORT).show() else if (value.isBlank()) android.widget.Toast.makeText(requireContext(), "DNC was not added: enter a date", android.widget.Toast.LENGTH_SHORT).show() else if (!value.matches(Regex("(0[1-9]|1[0-2])/\\d{2}"))) android.widget.Toast.makeText(requireContext(), "DNC was not added: date must be MM/YY", android.widget.Toast.LENGTH_SHORT).show() else { val entries = com.example.mapasssist.data.DncEntryCodec.decode(selected.entriesJson).toMutableList(); entries += com.example.mapasssist.data.DncEntry(value, address.text.toString(), info.text.toString()); viewModel.update(selected.copy(entriesJson = com.example.mapasssist.data.DncEntryCodec.encode(entries), lastModified = System.currentTimeMillis())); android.widget.Toast.makeText(requireContext(), "DNC added", android.widget.Toast.LENGTH_SHORT).show() } }.show()
     }
 
     private fun submitSorted(adapter: TextFileListAdapter) {

@@ -12,6 +12,5 @@
         <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1.2" android:text="ADDRESS" android:textAppearance="@style/TextAppearance.MapAssist.FileMeta" />
         <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="0.8" android:text="SUPPORTING INFORMATION" android:textAppearance="@style/TextAppearance.MapAssist.FileMeta" />
     </LinearLayout>
-    <androidx.recyclerview.widget.RecyclerView android:id="@+id/entries_recyclerview" android:layout_width="0dp" android:layout_height="0dp" android:layout_marginTop="8dp" app:layout_constraintBottom_toTopOf="@id/button_share" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/column_headers" />
-    <com.google.android.material.button.MaterialButton android:id="@+id/button_share" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:text="Save" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" />
+    <androidx.recyclerview.widget.RecyclerView android:id="@+id/entries_recyclerview" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginTop="8dp" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toBottomOf="@id/column_headers" />
 </androidx.constraintlayout.widget.ConstraintLayout>
