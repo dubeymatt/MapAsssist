@@ -26,6 +26,10 @@ class TextFileViewModel(application: Application) : AndroidViewModel(application
         repository.delete(textFile)
     }
 
+    fun replaceAll(textFiles: List<TextFile>) = viewModelScope.launch {
+        repository.replaceAll(textFiles)
+    }
+
     suspend fun getTextFileById(id: Int): TextFile? {
         return repository.getTextFileById(id)
     }

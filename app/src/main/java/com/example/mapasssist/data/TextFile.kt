@@ -8,6 +8,8 @@ data class TextFile(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
     val title: String,
-    val content: String,
+    val content: String = "",
+    val mapNo: String = "",
+    val entriesJson: String = "[]",
     val lastModified: Long = System.currentTimeMillis()
 )

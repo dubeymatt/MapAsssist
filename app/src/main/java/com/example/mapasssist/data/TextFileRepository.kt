@@ -18,4 +18,6 @@ class TextFileRepository(private val textFileDao: TextFileDao) {
     suspend fun delete(textFile: TextFile) {
         textFileDao.delete(textFile)
     }
+
+    suspend fun replaceAll(textFiles: List<TextFile>) = textFileDao.replaceAll(textFiles)
 }

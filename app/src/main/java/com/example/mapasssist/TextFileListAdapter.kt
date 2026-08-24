@@ -9,66 +9,28 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.example.mapasssist.data.TextFile
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 
-class TextFileListAdapter(private val onItemClicked: (TextFile) -> Unit) :
-    ListAdapter<TextFile, TextFileListAdapter.TextFileViewHolder>(TextFileComparator()) {
-
-    private var gridMode = false
-
-    fun setGridMode(enabled: Boolean) {
-        if (gridMode == enabled) return
-        gridMode = enabled
-        notifyDataSetChanged()
-    }
-
-    override fun getItemViewType(position: Int): Int = if (gridMode) GRID_VIEW else LIST_VIEW
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): TextFileViewHolder {
-        return TextFileViewHolder.create(parent, viewType)
-    }
-
-    override fun onBindViewHolder(holder: TextFileViewHolder, position: Int) {
-        val current = getItem(position)
-        holder.bind(current)
-        holder.itemView.setOnClickListener {
-            onItemClicked(current)
+class TextFileListAdapter(private val open: (TextFile) -> Unit, private val updated: (TextFile) -> Unit, private val deleted: (TextFile) -> Unit) : ListAdapter<TextFile, TextFileListAdapter.Holder>(Diff()) {
+    private var grid = false
+    var editMode = false
+        set(value) { field = value; notifyDataSetChanged() }
+    fun setGridMode(enabled: Boolean) { if (grid != enabled) { grid = enabled; notifyDataSetChanged() } }
+    override fun getItemViewType(position: Int) = if (grid) 1 else 0
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(LayoutInflater.from(parent.context).inflate(if (viewType == 1) R.layout.recyclerview_grid_item else R.layout.recyclerview_item, parent, false))
+    override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(getItem(position))
+    inner class Holder(view: View) : RecyclerView.ViewHolder(view) {
+        private val title = view.findViewById<TextView>(R.id.textViewTitle); private val date = view.findViewById<TextView>(R.id.textViewDate); private val badge = view.findViewById<TextView>(R.id.map_number_badge); private val delete = view.findViewById<View>(R.id.delete_card)
+        fun bind(file: TextFile) {
+            title.text = file.title; badge.text = file.mapNo; date.text = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(file.lastModified)); delete.visibility = if (editMode) View.VISIBLE else View.GONE
+            title.setCompoundDrawablesWithIntrinsicBounds(0, 0, if (editMode) R.drawable.ic_edit else 0, 0); badge.setCompoundDrawablesWithIntrinsicBounds(0, 0, if (editMode) R.drawable.ic_edit else 0, 0)
+            title.setOnClickListener(if (editMode) View.OnClickListener { edit(file, false) } else null); badge.setOnClickListener(if (editMode) View.OnClickListener { edit(file, true) } else null); delete.setOnClickListener { android.app.AlertDialog.Builder(itemView.context).setTitle("Permanently delete DNC card?").setMessage("This cannot be undone. All addresses and supporting information in ${file.title} will be permanently deleted.").setNegativeButton("Cancel", null).setPositiveButton("Delete") { _, _ -> deleted(file) }.show() }; itemView.setOnClickListener { if (!editMode) open(file) }
+        }
+        private fun edit(file: TextFile, number: Boolean) {
+            val input = android.widget.EditText(itemView.context).apply { setText(if (number) file.mapNo else file.title); selectAll() }
+            android.app.AlertDialog.Builder(itemView.context).setTitle(if (number) "Edit Map No." else "Rename DNC").setView(input).setNegativeButton("Cancel", null).setPositiveButton("Save") { _, _ -> updated(if (number) file.copy(mapNo = input.text.toString(), lastModified = System.currentTimeMillis()) else file.copy(title = input.text.toString(), lastModified = System.currentTimeMillis())) }.show()
         }
     }
-
-    class TextFileViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
-        private val titleView: TextView = itemView.findViewById(R.id.textViewTitle)
-        private val contentView: TextView = itemView.findViewById(R.id.textViewContent)
-        private val dateView: TextView = itemView.findViewById(R.id.textViewDate)
-
-        fun bind(textFile: TextFile) {
-            titleView.text = textFile.title
-            contentView.text = textFile.content
-            val sdf = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
-            dateView.text = sdf.format(Date(textFile.lastModified))
-        }
-
-        companion object {
-            fun create(parent: ViewGroup, viewType: Int): TextFileViewHolder {
-                val view: View = LayoutInflater.from(parent.context)
-                    .inflate(if (viewType == GRID_VIEW) R.layout.recyclerview_grid_item else R.layout.recyclerview_item, parent, false)
-                return TextFileViewHolder(view)
-            }
-        }
-    }
-
-    class TextFileComparator : DiffUtil.ItemCallback<TextFile>() {
-        override fun areItemsTheSame(oldItem: TextFile, newItem: TextFile): Boolean {
-            return oldItem.id == newItem.id
-        }
-
-        override fun areContentsTheSame(oldItem: TextFile, newItem: TextFile): Boolean {
-            return oldItem.title == newItem.title && oldItem.content == newItem.content
-        }
-    }
-
-    private companion object {
-        const val LIST_VIEW = 0
-        const val GRID_VIEW = 1
-    }
+    class Diff : DiffUtil.ItemCallback<TextFile>() { override fun areItemsTheSame(a: TextFile, b: TextFile) = a.id == b.id; override fun areContentsTheSame(a: TextFile, b: TextFile) = a == b }
 }

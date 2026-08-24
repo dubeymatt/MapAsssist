@@ -23,15 +23,21 @@ class MainActivity : AppCompatActivity() {
         binding.bottomNavigation.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.navigation_dncs -> { if (navController.currentDestination?.id != R.id.FirstFragment) navController.popBackStack(R.id.FirstFragment, false); true }
-                else -> { Toast.makeText(this, "This section is coming soon", Toast.LENGTH_SHORT).show(); false }
+                R.id.navigation_settings -> { navController.navigate(R.id.SettingsFragment); true }
+                else -> { Toast.makeText(this, "Maps is coming soon", Toast.LENGTH_SHORT).show(); false }
             }
         }
         navController.addOnDestinationChangedListener { _, destination, _ ->
             val isDncPage = destination.id == R.id.FirstFragment
+            val isTabPage = isDncPage || destination.id == R.id.SettingsFragment
             binding.addFab.visibility = if (isDncPage) View.VISIBLE else View.GONE
-            binding.bottomNavigation.visibility = if (isDncPage) View.VISIBLE else View.GONE
-            binding.toolbar.navigationIcon = if (isDncPage) null else getDrawable(R.drawable.ic_back)
-            binding.toolbar.title = if (isDncPage) getString(R.string.app_name) else getString(R.string.second_fragment_label)
+            binding.bottomNavigation.visibility = if (isTabPage) View.VISIBLE else View.GONE
+            binding.toolbar.navigationIcon = if (isTabPage) null else getDrawable(R.drawable.ic_back)
+            binding.toolbar.title = when (destination.id) {
+                R.id.FirstFragment -> getString(R.string.app_name)
+                R.id.SettingsFragment -> "Settings"
+                else -> getString(R.string.second_fragment_label)
+            }
         }
     }
     override fun onSupportNavigateUp(): Boolean {

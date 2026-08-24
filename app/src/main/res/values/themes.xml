@@ -18,7 +18,7 @@
     <style name="TextAppearance.MapAssist.FileTitle" parent="TextAppearance.Material3.TitleMedium"><item name="android:textColor">@color/on_surface</item></style>
     <style name="TextAppearance.MapAssist.FilePreview" parent="TextAppearance.Material3.BodyMedium"><item name="android:textColor">@color/on_surface_variant</item></style>
     <style name="TextAppearance.MapAssist.FileMeta" parent="TextAppearance.Material3.LabelMedium"><item name="android:textColor">@color/on_surface_variant</item></style>
-    <style name="Widget.MapAssist.NavigationBar.ActiveIndicator">
+    <style name="Widget.MapAssist.NavigationBar.ActiveIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
         <item name="android:color">@color/primary_container</item>
     </style>
 </resources>

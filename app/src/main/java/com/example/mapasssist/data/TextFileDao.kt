@@ -19,4 +19,16 @@ interface TextFileDao {
 
     @Delete
     suspend fun delete(textFile: TextFile)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(textFiles: List<TextFile>)
+
+    @Query("DELETE FROM text_files")
+    suspend fun clearAll()
+
+    @Transaction
+    suspend fun replaceAll(textFiles: List<TextFile>) {
+        clearAll()
+        insertAll(textFiles)
+    }
 }
