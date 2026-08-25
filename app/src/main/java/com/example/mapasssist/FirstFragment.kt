@@ -59,8 +59,8 @@ class FirstFragment : Fragment() {
         }
 
         binding.editCardsButton.setOnClickListener {
-            if (adapter.editMode) { adapter.editMode = false; configureAddButton(adapter, false) }
-            else android.app.AlertDialog.Builder(requireContext()).setTitle("Enable edit mode?").setMessage("Renaming or deleting DNC cards makes permanent changes to your saved data.").setNegativeButton("Cancel", null).setPositiveButton("Continue") { _, _ -> adapter.editMode = true; configureAddButton(adapter, true) }.show()
+            if (adapter.editMode) { adapter.editMode = false; binding.editCardsButton.setIconResource(R.drawable.ic_edit); configureAddButton(adapter, false) }
+            else android.app.AlertDialog.Builder(requireContext()).setTitle("Enable edit mode?").setMessage("Renaming or deleting DNC cards makes permanent changes to your saved data.").setNegativeButton("Cancel", null).setPositiveButton("Continue") { _, _ -> adapter.editMode = true; binding.editCardsButton.setIconResource(R.drawable.ic_check); configureAddButton(adapter, true) }.show()
         }
 
         configureAddButton(adapter, false)
@@ -75,6 +75,7 @@ class FirstFragment : Fragment() {
                     sortNumerically = item.itemId == 3
                     preferences.edit().putInt("sort_mode", item.itemId).apply()
                     submitSorted(adapter)
+                    binding.recyclerview.post { binding.recyclerview.scrollToPosition(0) }
                     true
                 }
                 show()
@@ -106,8 +107,8 @@ class FirstFragment : Fragment() {
     private fun quickAdd() {
         val labels = currentFiles.sortedWith(compareBy<TextFile> { it.mapNo.substringBefore(" ").toIntOrNull() ?: Int.MAX_VALUE }.thenBy { it.mapNo }).map { "${it.mapNo} - ${it.title}" }
         val picker = android.widget.AutoCompleteTextView(requireContext()).apply { hint = "Search DNC card"; setAdapter(android.widget.ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, labels)); threshold = 1; setOnFocusChangeListener { _, focused -> if (focused) showDropDown() }; addTextChangedListener(object : android.text.TextWatcher { override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit; override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit; override fun afterTextChanged(s: android.text.Editable?) { if (s.isNullOrEmpty()) showDropDown() } }) }
-        val date = EditText(requireContext()).apply { hint = "Date (MM/YY)"; inputType = android.text.InputType.TYPE_CLASS_DATETIME or android.text.InputType.TYPE_DATETIME_VARIATION_DATE; layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f) }; val calendar = com.google.android.material.button.MaterialButton(requireContext()).apply { text = "Select…"; textSize = 16f; setOnClickListener { MonthYearPicker.show(requireContext()) { date.setText(it) } } }; val dateRow = android.widget.LinearLayout(requireContext()).apply { orientation = android.widget.LinearLayout.HORIZONTAL; addView(date); addView(calendar, android.widget.LinearLayout.LayoutParams(140, 68)) }; val address = EditText(requireContext()).apply { hint = "Address" }; val info = EditText(requireContext()).apply { hint = "Supporting information" }
-        val form = android.widget.LinearLayout(requireContext()).apply { orientation = android.widget.LinearLayout.VERTICAL; setPadding(48, 0, 48, 0); addView(picker); addView(dateRow); addView(address); addView(info) }
+        val now = java.util.Calendar.getInstance(); val date = EditText(requireContext()).apply { hint = "Date (MM/YY)"; setText("%02d/%02d".format(now.get(java.util.Calendar.MONTH) + 1, now.get(java.util.Calendar.YEAR) % 100)); inputType = android.text.InputType.TYPE_CLASS_DATETIME or android.text.InputType.TYPE_DATETIME_VARIATION_DATE; setOnClickListener { MonthYearPicker.show(requireContext()) { setText(it) } } }; val address = EditText(requireContext()).apply { hint = "Address" }; val info = EditText(requireContext()).apply { hint = "Supporting information" }
+        val form = android.widget.LinearLayout(requireContext()).apply { orientation = android.widget.LinearLayout.VERTICAL; setPadding(48, 0, 48, 0); addView(picker); addView(date); addView(address); addView(info) }
         android.app.AlertDialog.Builder(requireContext()).setTitle("Add DNC entry").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Add") { _, _ -> val value = date.text.toString(); val selected = currentFiles.firstOrNull { "${it.mapNo} - ${it.title}" == picker.text.toString() }; if (selected == null) android.widget.Toast.makeText(requireContext(), "DNC was not added: select a card", android.widget.Toast.LENGTH_SHORT).show() else if (value.isBlank()) android.widget.Toast.makeText(requireContext(), "DNC was not added: enter a date", android.widget.Toast.LENGTH_SHORT).show() else if (!value.matches(Regex("(0[1-9]|1[0-2])/\\d{2}"))) android.widget.Toast.makeText(requireContext(), "DNC was not added: date must be MM/YY", android.widget.Toast.LENGTH_SHORT).show() else { val entries = com.example.mapasssist.data.DncEntryCodec.decode(selected.entriesJson).toMutableList(); entries += com.example.mapasssist.data.DncEntry(value, address.text.toString(), info.text.toString()); viewModel.update(selected.copy(entriesJson = com.example.mapasssist.data.DncEntryCodec.encode(entries), lastModified = System.currentTimeMillis())); android.widget.Toast.makeText(requireContext(), "DNC added", android.widget.Toast.LENGTH_SHORT).show() } }.show()
     }
 

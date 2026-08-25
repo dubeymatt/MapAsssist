@@ -54,7 +54,7 @@ class SecondFragment : Fragment() {
         }
         binding.addEntryButton.text = "Add DNC"
         binding.addEntryButton.setOnClickListener { showAddDialog(adapter) }
-        binding.editEntriesButton.setOnClickListener { adapter.editMode = !adapter.editMode }
+        binding.editEntriesButton.setOnClickListener { adapter.editMode = !adapter.editMode; binding.editEntriesButton.setIconResource(if (adapter.editMode) R.drawable.ic_check else R.drawable.ic_edit) }
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (saved || !hasChanges(adapter)) { isEnabled = false; requireActivity().onBackPressedDispatcher.onBackPressed() }
@@ -63,12 +63,10 @@ class SecondFragment : Fragment() {
         })
     }
     private fun showAddDialog(adapter: DncEntryAdapter) {
-        val date = android.widget.EditText(requireContext()).apply { hint = "Date (MM/YY)"; inputType = android.text.InputType.TYPE_CLASS_DATETIME or android.text.InputType.TYPE_DATETIME_VARIATION_DATE; layoutParams = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f) }
-        val calendar = com.google.android.material.button.MaterialButton(requireContext()).apply { text = "Select…"; textSize = 16f; setOnClickListener { MonthYearPicker.show(requireContext()) { date.setText(it) } } }
-        val dateRow = android.widget.LinearLayout(requireContext()).apply { orientation = android.widget.LinearLayout.HORIZONTAL; addView(date); addView(calendar, android.widget.LinearLayout.LayoutParams(140, 68)) }
+        val now = java.util.Calendar.getInstance(); val date = android.widget.EditText(requireContext()).apply { hint = "Date (MM/YY)"; setText("%02d/%02d".format(now.get(java.util.Calendar.MONTH) + 1, now.get(java.util.Calendar.YEAR) % 100)); inputType = android.text.InputType.TYPE_CLASS_DATETIME or android.text.InputType.TYPE_DATETIME_VARIATION_DATE; setOnClickListener { MonthYearPicker.show(requireContext()) { setText(it) } } }
         val address = android.widget.EditText(requireContext()).apply { hint = "Address" }
         val info = android.widget.EditText(requireContext()).apply { hint = "Supporting information" }
-        val form = android.widget.LinearLayout(requireContext()).apply { orientation = android.widget.LinearLayout.VERTICAL; setPadding(48, 0, 48, 0); addView(dateRow); addView(address); addView(info) }
+        val form = android.widget.LinearLayout(requireContext()).apply { orientation = android.widget.LinearLayout.VERTICAL; setPadding(48, 0, 48, 0); addView(date); addView(address); addView(info) }
         android.app.AlertDialog.Builder(requireContext()).setTitle("Add DNC entry").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Add") { _, _ ->
             val value = date.text.toString(); if (value.isBlank()) Toast.makeText(requireContext(), "DNC was not added: enter a date", Toast.LENGTH_SHORT).show() else if (!value.matches(Regex("(0[1-9]|1[0-2])/\\d{2}"))) Toast.makeText(requireContext(), "DNC was not added: date must be MM/YY", Toast.LENGTH_SHORT).show() else { entries += DncEntry(value, address.text.toString(), info.text.toString()); adapter.notifyItemInserted(entries.lastIndex); autoSave(); Toast.makeText(requireContext(), "DNC added", Toast.LENGTH_SHORT).show() }
         }.show()

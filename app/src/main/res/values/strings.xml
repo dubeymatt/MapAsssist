@@ -4,7 +4,7 @@
     <string name="dnc_title">DNC Cards</string>
     <string name="dnc_subtitle">Keep your do-not-contact lists organised.</string>
     <string name="empty_dnc_title">No DNC files yet</string>
-    <string name="empty_dnc_body">Create your first list to keep important\ncontact exclusions in one place.</string>
+    <string name="empty_dnc_body">Tap Edit in the top-right corner, then choose\nAdd DNC Card to create your first card.</string>
     <string name="list_view">List view</string>
     <string name="grid_view">Grid view</string>
     <string name="sort_files">Sort files</string>

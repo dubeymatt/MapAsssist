@@ -45,7 +45,6 @@ class DncEntryAdapter(private val entries: MutableList<DncEntry>, private val st
                 if (!editMode) return@setOnClickListener
                 MonthYearPicker.show(binding.root.context) { binding.entryDate.setText(it) }
             }
-            binding.entrySelectDate.setOnClickListener { if (editMode) MonthYearPicker.show(binding.root.context) { binding.entryDate.setText(it) } }
             binding.entryDate.doAfterTextChanged { if (editMode) update(adapterPosition, date = it.toString()) }
             binding.entryAddress.doAfterTextChanged { if (editMode) update(adapterPosition, address = it.toString()) }
             binding.entrySupportingInformation.doAfterTextChanged { if (editMode) update(adapterPosition, supporting = it.toString()) }
