@@ -59,13 +59,7 @@ object DncImageExporter {
 
     fun download(context: Context, file: TextFile) {
         val name = safeName(file) + ".png"
-        val alreadyExists = context.contentResolver.query(
-            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-            arrayOf(MediaStore.MediaColumns._ID),
-            "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.RELATIVE_PATH}=?",
-            arrayOf(name, "Download/Map Assist/"),
-            null
-        )?.use { it.moveToFirst() } == true
+        val alreadyExists = exportedFilesExist(context, name)
 
         if (alreadyExists) {
             AlertDialog.Builder(context)
@@ -82,11 +76,7 @@ object DncImageExporter {
     fun downloadAll(context: Context, files: List<TextFile>) {
         files.forEach { file ->
             val name = safeName(file) + ".png"
-            context.contentResolver.delete(
-                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.RELATIVE_PATH}=?",
-                arrayOf(name, "Download/Map Assist/")
-            )
+            deletePreviousExports(context, name)
             saveDownload(context, file, name, replace = false, showMessage = false)
         }
         android.widget.Toast.makeText(context, "Saved ${files.size} DNC cards to Downloads/Map Assist", android.widget.Toast.LENGTH_LONG).show()
@@ -94,11 +84,7 @@ object DncImageExporter {
 
     private fun saveDownload(context: Context, file: TextFile, name: String, replace: Boolean, showMessage: Boolean = true) {
         if (replace) {
-            context.contentResolver.delete(
-                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.RELATIVE_PATH}=?",
-                arrayOf(name, "Download/Map Assist/")
-            )
+            deletePreviousExports(context, name)
         }
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
@@ -110,6 +96,27 @@ object DncImageExporter {
             render(file).compress(Bitmap.CompressFormat.PNG, 100, stream)
         }
         if (showMessage) android.widget.Toast.makeText(context, "Saved to Downloads/Map Assist", android.widget.Toast.LENGTH_LONG).show()
+    }
+
+    /** Removes the exact export plus Android's old '(1)', '(2)' conflict copies. */
+    private fun deletePreviousExports(context: Context, name: String) {
+        val stem = name.substringBeforeLast('.')
+        context.contentResolver.delete(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            "${MediaStore.MediaColumns.RELATIVE_PATH}=? AND (${MediaStore.MediaColumns.DISPLAY_NAME}=? OR ${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?)",
+            arrayOf("Download/Map Assist/", name, "$stem (%).png")
+        )
+    }
+
+    private fun exportedFilesExist(context: Context, name: String): Boolean {
+        val stem = name.substringBeforeLast('.')
+        return context.contentResolver.query(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            arrayOf(MediaStore.MediaColumns._ID),
+            "${MediaStore.MediaColumns.RELATIVE_PATH}=? AND (${MediaStore.MediaColumns.DISPLAY_NAME}=? OR ${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?)",
+            arrayOf("Download/Map Assist/", name, "$stem (%).png"),
+            null
+        )?.use { it.moveToFirst() } == true
     }
 
     private fun cacheImage(context: Context, file: TextFile): Uri {

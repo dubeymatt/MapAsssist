@@ -50,10 +50,6 @@ class SettingsFragment : Fragment() {
         binding.darkModeSwitch.isChecked = preferences.getBoolean("dark_mode", false)
         binding.darkModeSwitch.setOnCheckedChangeListener { _, enabled -> preferences.edit().putBoolean("dark_mode", enabled).apply(); AppCompatDelegate.setDefaultNightMode(if (enabled) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO) }
         binding.openDownloadsButton.setOnClickListener {
-            if (!mapAssistFolderExists()) {
-                Toast.makeText(requireContext(), "Export DNC to Create Folder", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
             val intent = android.content.Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS)
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
             runCatching { startActivity(intent) }.getOrElse {
@@ -66,19 +62,6 @@ class SettingsFragment : Fragment() {
             exportFile.launch("map_assist_dncs_$date.csv")
         }
         binding.importButton.setOnClickListener { importFile.launch(arrayOf("text/csv", "text/comma-separated-values", "application/vnd.ms-excel")) }
-    }
-    private fun mapAssistFolderExists(): Boolean = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-        requireContext().contentResolver.query(
-            android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-            arrayOf(android.provider.MediaStore.MediaColumns._ID),
-            "${android.provider.MediaStore.MediaColumns.RELATIVE_PATH}=?",
-            arrayOf("Download/Map Assist/"),
-            null
-        )?.use { it.moveToFirst() } == true
-    } else {
-        val downloads = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-        val folder = java.io.File(downloads, "Map Assist")
-        folder.exists() && folder.isDirectory
     }
     private fun readCsv(uri: android.net.Uri): List<TextFile> {
         val grouped = linkedMapOf<Pair<String, String>, MutableList<DncEntry>>(); var active: Pair<String, String>? = null
