@@ -45,6 +45,8 @@ class FirstFragment : Fragment() {
             findNavController().navigate(R.id.action_FirstFragment_to_SecondFragment, bundle)
         }, { viewModel.update(it) }, { viewModel.delete(it) })
         binding.recyclerview.adapter = adapter
+        binding.recyclerview.alpha = 0f
+        binding.recyclerview.animate().alpha(1f).setDuration(180).start()
         val savedGrid = preferences.getBoolean("grid_view", false)
         binding.viewToggle.check(if (savedGrid) R.id.grid_view_button else R.id.list_view_button)
         binding.recyclerview.layoutManager = if (savedGrid) GridLayoutManager(requireContext(), 2) else LinearLayoutManager(requireContext())

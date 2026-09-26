@@ -27,20 +27,26 @@ class MainActivity : AppCompatActivity() {
         binding.bottomNavigation.selectedItemId = R.id.navigation_dncs
         binding.bottomNavigation.setOnItemSelectedListener { item ->
             when (item.itemId) {
+                R.id.navigation_maps -> { if (navController.currentDestination?.id != R.id.MapsFragment) navController.navigate(R.id.MapsFragment); true }
                 R.id.navigation_dncs -> { if (navController.currentDestination?.id != R.id.FirstFragment) navController.popBackStack(R.id.FirstFragment, false); true }
                 R.id.navigation_settings -> { navController.navigate(R.id.SettingsFragment); true }
-                else -> { Toast.makeText(this, "Maps is coming soon", Toast.LENGTH_SHORT).show(); false }
+                else -> false
             }
         }
         navController.addOnDestinationChangedListener { _, destination, _ ->
             val isDncPage = destination.id == R.id.FirstFragment
-            val isTabPage = isDncPage || destination.id == R.id.SettingsFragment
+            val isTabPage = isDncPage || destination.id == R.id.SettingsFragment || destination.id == R.id.MapsFragment
+            val content = binding.root.findViewById<View>(R.id.content_main_root)
+            content.layoutParams = (content.layoutParams as android.view.ViewGroup.MarginLayoutParams).apply {
+                bottomMargin = if (isTabPage) (80 * resources.displayMetrics.density).toInt() else 0
+            }
             binding.addFab.visibility = if (isDncPage) View.VISIBLE else View.GONE
             binding.bottomNavigation.visibility = if (isTabPage) View.VISIBLE else View.GONE
             binding.toolbar.navigationIcon = if (isTabPage) null else getDrawable(R.drawable.ic_back)
             binding.toolbar.title = when (destination.id) {
                 R.id.FirstFragment -> getString(R.string.app_name)
                 R.id.SettingsFragment -> "Settings"
+                R.id.MapsFragment -> getString(R.string.app_name)
                 else -> getString(R.string.second_fragment_label)
             }
         }

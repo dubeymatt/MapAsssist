@@ -1,15 +1,123 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingTop="4dp" android:paddingBottom="4dp">
-    <ImageView android:id="@+id/drag_handle" android:layout_width="20dp" android:layout_height="48dp" android:contentDescription="Reorder row" android:src="@drawable/ic_drag_handle" android:visibility="gone" />
-    <LinearLayout android:id="@+id/display_fields" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="horizontal">
-        <TextView android:id="@+id/display_date" android:layout_width="84dp" android:layout_height="64dp" android:gravity="center_vertical" android:maxLines="2" android:padding="8dp" android:textAppearance="@style/TextAppearance.MapAssist.FileMeta" />
-        <TextView android:id="@+id/display_address" android:layout_width="0dp" android:layout_height="64dp" android:layout_weight="1.2" android:gravity="center_vertical" android:maxLines="2" android:padding="8dp" android:textAppearance="@style/TextAppearance.MapAssist.FilePreview" />
-        <TextView android:id="@+id/display_supporting_information" android:layout_width="0dp" android:layout_height="64dp" android:layout_weight="0.8" android:gravity="center_vertical" android:maxLines="2" android:padding="8dp" android:textAppearance="@style/TextAppearance.MapAssist.FilePreview" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginEnd="10dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <ImageView
+        android:id="@+id/drag_handle"
+        android:layout_width="20dp"
+        android:layout_height="48dp"
+        android:contentDescription="Reorder row"
+        android:src="@drawable/ic_drag_handle"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/display_fields"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/display_date"
+            android:layout_width="56dp"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:gravity="center_vertical"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="6dp"
+            android:textAppearance="@style/TextAppearance.MapAssist.FileMeta" />
+        <View
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:alpha="0.55"
+            android:background="@color/outline_variant" />
+        <TextView
+            android:id="@+id/display_address"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.2"
+            android:minHeight="48dp"
+            android:gravity="center_vertical"
+            android:includeFontPadding="false"
+            android:lineSpacingExtra="0dp"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="6dp"
+            android:textAppearance="@style/TextAppearance.MapAssist.FilePreview" />
+        <View
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:alpha="0.55"
+            android:background="@color/outline_variant" />
+        <TextView
+            android:id="@+id/display_supporting_information"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="0.8"
+            android:minHeight="48dp"
+            android:gravity="center_vertical"
+            android:includeFontPadding="false"
+            android:lineSpacingExtra="0dp"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="6dp"
+            android:textAppearance="@style/TextAppearance.MapAssist.FilePreview" />
     </LinearLayout>
-    <LinearLayout android:id="@+id/editor_fields" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="horizontal" android:visibility="gone">
-        <com.google.android.material.textfield.TextInputLayout android:layout_width="84dp" android:layout_height="wrap_content"><com.google.android.material.textfield.TextInputEditText android:id="@+id/entry_date" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="MM/YY" android:inputType="datetime" android:maxLength="5" /></com.google.android.material.textfield.TextInputLayout>
-        <com.google.android.material.textfield.TextInputLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_weight="1.2"><com.google.android.material.textfield.TextInputEditText android:id="@+id/entry_address" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="Address" /></com.google.android.material.textfield.TextInputLayout>
-        <com.google.android.material.textfield.TextInputLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="4dp" android:layout_weight="0.8"><com.google.android.material.textfield.TextInputEditText android:id="@+id/entry_supporting_information" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="Supporting information" /></com.google.android.material.textfield.TextInputLayout>
+
+    <LinearLayout
+        android:id="@+id/editor_fields"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="56dp"
+            android:layout_height="wrap_content">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/entry_date"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="MM/YY"
+                android:inputType="datetime"
+                android:maxLength="5" />
+        </com.google.android.material.textfield.TextInputLayout>
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1.2">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/entry_address"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Address" />
+        </com.google.android.material.textfield.TextInputLayout>
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_weight="0.8">
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/entry_supporting_information"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Supporting information" />
+        </com.google.android.material.textfield.TextInputLayout>
     </LinearLayout>
-    <ImageButton android:id="@+id/delete_entry" android:layout_width="40dp" android:layout_height="48dp" android:background="@android:color/transparent" android:contentDescription="Delete row" android:src="@drawable/ic_delete" android:visibility="gone" />
+
+    <ImageButton
+        android:id="@+id/delete_entry"
+        android:layout_width="40dp"
+        android:layout_height="48dp"
+        android:background="@android:color/transparent"
+        android:contentDescription="Delete row"
+        android:src="@drawable/ic_delete"
+        android:visibility="gone" />
 </LinearLayout>
