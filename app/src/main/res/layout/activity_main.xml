@@ -18,7 +18,7 @@
             android:layout_height="88dp"
             android:paddingTop="30dp"
             android:paddingStart="8dp"
-            android:paddingEnd="20dp"
+            android:paddingEnd="4dp"
             app:title="@string/app_name"
             app:titleTextAppearance="@style/TextAppearance.MapAssist.Toolbar" />
 

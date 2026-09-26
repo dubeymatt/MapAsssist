@@ -12,7 +12,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class TextFileListAdapter(private val open: (TextFile) -> Unit, private val updated: (TextFile) -> Unit, private val deleted: (TextFile) -> Unit) : ListAdapter<TextFile, TextFileListAdapter.Holder>(Diff()) {
+class TextFileListAdapter(private val open: (TextFile) -> Unit, private val updated: (TextFile) -> Unit, private val deleted: (TextFile) -> Unit, private val shareMapAndDnc: (TextFile) -> Unit) : ListAdapter<TextFile, TextFileListAdapter.Holder>(Diff()) {
     private var grid = false
     var editMode = false
         set(value) { field = value; notifyDataSetChanged() }
@@ -21,14 +21,14 @@ class TextFileListAdapter(private val open: (TextFile) -> Unit, private val upda
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(LayoutInflater.from(parent.context).inflate(if (viewType == 1) R.layout.recyclerview_grid_item else R.layout.recyclerview_item, parent, false))
     override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(getItem(position))
     inner class Holder(view: View) : RecyclerView.ViewHolder(view) {
-        private val title = view.findViewById<TextView>(R.id.textViewTitle); private val date = view.findViewById<TextView>(R.id.textViewDate); private val badge = view.findViewById<TextView>(R.id.map_number_badge); private val delete = view.findViewById<View?>(R.id.delete_card); private val download = view.findViewById<View?>(R.id.download_card); private val share = view.findViewById<View?>(R.id.share_card); private val actions = view.findViewById<View?>(R.id.card_actions)
+        private val title = view.findViewById<TextView>(R.id.textViewTitle); private val date = view.findViewById<TextView>(R.id.textViewDate); private val badge = view.findViewById<TextView>(R.id.map_number_badge); private val delete = view.findViewById<View?>(R.id.delete_card); private val mapAndDnc = view.findViewById<View?>(R.id.share_map_dnc_card); private val share = view.findViewById<View?>(R.id.share_card); private val actions = view.findViewById<View?>(R.id.card_actions)
         fun bind(file: TextFile) {
-            title.text = file.title; badge.text = file.mapNo; date.text = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(file.lastModified)); delete?.visibility = if (editMode) View.VISIBLE else View.GONE; actions?.visibility = if (editMode) View.GONE else View.VISIBLE; download?.visibility = if (editMode) View.GONE else View.VISIBLE; share?.visibility = if (editMode) View.GONE else View.VISIBLE
+            title.text = file.title; badge.text = file.mapNo; date.text = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(file.lastModified)); delete?.visibility = if (editMode) View.VISIBLE else View.GONE; actions?.visibility = if (editMode) View.GONE else View.VISIBLE; mapAndDnc?.visibility = if (editMode) View.GONE else View.VISIBLE; share?.visibility = if (editMode) View.GONE else View.VISIBLE
             val openCard = View.OnClickListener { if (!editMode) open(file) }
             title.isClickable = true; badge.isClickable = true; date.isClickable = true; itemView.isClickable = true
             title.setCompoundDrawablesWithIntrinsicBounds(0, 0, if (editMode) R.drawable.ic_edit else 0, 0); badge.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
             title.setOnClickListener(if (editMode) View.OnClickListener { android.app.AlertDialog.Builder(itemView.context).setTitle("Edit DNC Card").setItems(arrayOf("Rename DNC", "Change Map No.")) { _, which -> edit(file, which == 1) }.show() } else openCard); badge.setOnClickListener(openCard); date.setOnClickListener(openCard); delete?.setOnClickListener { android.app.AlertDialog.Builder(itemView.context).setTitle("Permanently delete DNC card?").setMessage("This cannot be undone. All addresses and supporting information in ${file.title} will be permanently deleted.").setNegativeButton("Cancel", null).setPositiveButton("Delete") { _, _ -> deleted(file) }.show() }; itemView.setOnClickListener(openCard)
-            download?.setOnClickListener { DncImageExporter.download(itemView.context, file) }; share?.setOnClickListener { DncImageExporter.share(itemView.context, file) }
+            mapAndDnc?.setOnClickListener { shareMapAndDnc(file) }; share?.setOnClickListener { DncImageExporter.share(itemView.context, file) }
         }
         private fun edit(file: TextFile, number: Boolean) {
             val input = android.widget.EditText(itemView.context).apply { setText(if (number) file.mapNo else file.title); selectAll() }

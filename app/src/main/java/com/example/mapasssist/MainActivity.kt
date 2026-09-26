@@ -12,6 +12,7 @@ import com.example.mapasssist.databinding.ActivityMainBinding
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(R.style.Theme_MapAsssist)
         super.onCreate(savedInstanceState)
         AppCompatDelegate.setDefaultNightMode(if (getSharedPreferences("map_assist", 0).getBoolean("dark_mode", false)) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -35,6 +36,14 @@ class MainActivity : AppCompatActivity() {
         }
         navController.addOnDestinationChangedListener { _, destination, _ ->
             val isDncPage = destination.id == R.id.FirstFragment
+            if (!isDncPage) binding.toolbar.menu.clear()
+            val selectedTab = when (destination.id) {
+                R.id.FirstFragment -> R.id.navigation_dncs
+                R.id.MapsFragment -> R.id.navigation_maps
+                R.id.SettingsFragment -> R.id.navigation_settings
+                else -> null
+            }
+            selectedTab?.let { binding.bottomNavigation.menu.findItem(it).isChecked = true }
             val isTabPage = isDncPage || destination.id == R.id.SettingsFragment || destination.id == R.id.MapsFragment
             val content = binding.root.findViewById<View>(R.id.content_main_root)
             content.layoutParams = (content.layoutParams as android.view.ViewGroup.MarginLayoutParams).apply {

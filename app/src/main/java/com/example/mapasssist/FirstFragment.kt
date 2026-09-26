@@ -14,6 +14,10 @@ import android.widget.EditText
 import com.example.mapasssist.data.TextFile
 import com.example.mapasssist.data.TextFileViewModel
 import com.example.mapasssist.databinding.FragmentFirstBinding
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class FirstFragment : Fragment() {
 
@@ -43,10 +47,11 @@ class FirstFragment : Fragment() {
                 putInt("textFileId", textFile.id)
             }
             findNavController().navigate(R.id.action_FirstFragment_to_SecondFragment, bundle)
-        }, { viewModel.update(it) }, { viewModel.delete(it) })
+        }, { viewModel.update(it) }, { viewModel.delete(it) }, { file -> shareMapAndDnc(file) })
         binding.recyclerview.adapter = adapter
         binding.recyclerview.alpha = 0f
         binding.recyclerview.animate().alpha(1f).setDuration(180).start()
+        configureToolbarMenu()
         val savedGrid = preferences.getBoolean("grid_view", false)
         binding.viewToggle.check(if (savedGrid) R.id.grid_view_button else R.id.list_view_button)
         binding.recyclerview.layoutManager = if (savedGrid) GridLayoutManager(requireContext(), 2) else LinearLayoutManager(requireContext())
@@ -127,7 +132,42 @@ class FirstFragment : Fragment() {
         adapter.submitList(sorted)
     }
 
+    private fun shareMapAndDnc(file: TextFile) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val mapUri = withContext(Dispatchers.IO) { MapFileLocator.find(requireContext(), file.mapNo) }
+            if (mapUri == null) {
+                android.widget.Toast.makeText(requireContext(), "No map image found for map ${file.mapNo}", android.widget.Toast.LENGTH_SHORT).show()
+            } else {
+                DncImageExporter.shareWithMap(requireContext(), file, mapUri)
+            }
+        }
+    }
+
+    private fun configureToolbarMenu() {
+        val toolbar = requireActivity().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
+        toolbar.post {
+            if (_binding == null) return@post
+            toolbar.menu.clear()
+            toolbar.menu.add("Export all…").apply {
+                setIcon(R.drawable.ic_more)
+                setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
+            }
+            toolbar.setOnMenuItemClickListener {
+                if (it.title == "Export all…") {
+                    android.app.AlertDialog.Builder(requireContext())
+                        .setTitle("Export all DNC cards?")
+                        .setMessage("This will save a PNG image for every DNC card in Downloads/Map Assist. Existing exports with the same name will be replaced.")
+                        .setNegativeButton("Cancel", null)
+                        .setPositiveButton("Export All") { _, _ -> DncImageExporter.downloadAll(requireContext(), currentFiles) }
+                        .show()
+                    true
+                } else false
+            }
+        }
+    }
+
     override fun onDestroyView() {
+        requireActivity().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar).menu.clear()
         super.onDestroyView()
         _binding = null
     }

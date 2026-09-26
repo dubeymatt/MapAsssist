@@ -4,4 +4,9 @@
         <item name="colorPrimary">@color/primary</item>
         <item name="android:navigationBarColor">@color/surface_container</item>
     </style>
+
+    <style name="Theme.MapAsssist.Splash" parent="Base.Theme.MapAsssist">
+        <item name="android:windowBackground">@drawable/splash_background</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
 </resources>

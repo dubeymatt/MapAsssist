@@ -8,6 +8,11 @@
 
     <style name="Theme.MapAsssist" parent="Base.Theme.MapAsssist" />
 
+    <style name="Theme.MapAsssist.Splash" parent="Base.Theme.MapAsssist">
+        <item name="android:windowBackground">@drawable/splash_background</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
     <style name="TextAppearance.MapAssist.Toolbar" parent="TextAppearance.Material3.TitleLarge">
         <item name="android:textColor">@color/on_surface</item>
         <item name="android:textStyle">bold</item>

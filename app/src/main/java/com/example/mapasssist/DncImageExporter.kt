@@ -79,7 +79,20 @@ object DncImageExporter {
         }
     }
 
-    private fun saveDownload(context: Context, file: TextFile, name: String, replace: Boolean) {
+    fun downloadAll(context: Context, files: List<TextFile>) {
+        files.forEach { file ->
+            val name = safeName(file) + ".png"
+            context.contentResolver.delete(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.RELATIVE_PATH}=?",
+                arrayOf(name, "Download/Map Assist/")
+            )
+            saveDownload(context, file, name, replace = false, showMessage = false)
+        }
+        android.widget.Toast.makeText(context, "Saved ${files.size} DNC cards to Downloads/Map Assist", android.widget.Toast.LENGTH_LONG).show()
+    }
+
+    private fun saveDownload(context: Context, file: TextFile, name: String, replace: Boolean, showMessage: Boolean = true) {
         if (replace) {
             context.contentResolver.delete(
                 MediaStore.Downloads.EXTERNAL_CONTENT_URI,
@@ -96,7 +109,7 @@ object DncImageExporter {
         context.contentResolver.openOutputStream(uri)?.use { stream ->
             render(file).compress(Bitmap.CompressFormat.PNG, 100, stream)
         }
-        android.widget.Toast.makeText(context, "Saved to Downloads/Map Assist", android.widget.Toast.LENGTH_LONG).show()
+        if (showMessage) android.widget.Toast.makeText(context, "Saved to Downloads/Map Assist", android.widget.Toast.LENGTH_LONG).show()
     }
 
     private fun cacheImage(context: Context, file: TextFile): Uri {
