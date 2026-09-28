@@ -33,8 +33,8 @@ object DncImageExporter {
     private const val DATE_DIVIDER_X = 141f
     private const val SUPPORTING_DIVIDER_X = 733f
     private const val TABLE_TOP = 253f
-    private const val CELL_FONT_SIZE = 35f
-    private const val CELL_LINE_HEIGHT = 43f
+    private const val CELL_FONT_SIZE = 39f
+    private const val CELL_LINE_HEIGHT = 47f
 
     fun share(context: Context, file: TextFile) {
         val uri = cacheImage(context, file)
@@ -143,7 +143,7 @@ object DncImageExporter {
         canvas.drawText("DNC Record", 64f, 77f, paint)
         paint.textSize = 61f
         canvas.drawText("${file.mapNo} - ${file.title}", 64f, 149f, paint)
-        paint.textSize = 29f
+        paint.textSize = 33f
         canvas.drawText("Date", DATE_X, 216f, paint)
         canvas.drawText("Address", ADDRESS_X, 216f, paint)
         canvas.drawText("Supporting information", SUPPORTING_X, 216f, paint)

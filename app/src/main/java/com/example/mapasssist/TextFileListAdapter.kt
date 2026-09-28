@@ -4,6 +4,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import android.content.res.ColorStateList
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -23,12 +25,31 @@ class TextFileListAdapter(private val open: (TextFile) -> Unit, private val upda
     inner class Holder(view: View) : RecyclerView.ViewHolder(view) {
         private val title = view.findViewById<TextView>(R.id.textViewTitle); private val date = view.findViewById<TextView>(R.id.textViewDate); private val badge = view.findViewById<TextView>(R.id.map_number_badge); private val delete = view.findViewById<View?>(R.id.delete_card); private val mapAndDnc = view.findViewById<View?>(R.id.share_map_dnc_card); private val share = view.findViewById<View?>(R.id.share_card); private val actions = view.findViewById<View?>(R.id.card_actions)
         fun bind(file: TextFile) {
-            title.text = file.title; badge.text = file.mapNo; date.text = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(file.lastModified)); delete?.visibility = if (editMode) View.VISIBLE else View.GONE; actions?.visibility = if (editMode) View.GONE else View.VISIBLE; mapAndDnc?.visibility = if (editMode) View.GONE else View.VISIBLE; share?.visibility = if (editMode) View.GONE else View.VISIBLE
+            title.text = file.title; badge.text = file.mapNo; date.text = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(file.lastModified)); delete?.visibility = View.GONE; actions?.visibility = View.VISIBLE; mapAndDnc?.visibility = View.VISIBLE; share?.visibility = View.VISIBLE
             val openCard = View.OnClickListener { if (!editMode) open(file) }
             title.isClickable = true; badge.isClickable = true; date.isClickable = true; itemView.isClickable = true
-            title.setCompoundDrawablesWithIntrinsicBounds(0, 0, if (editMode) R.drawable.ic_edit else 0, 0); badge.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
-            title.setOnClickListener(if (editMode) View.OnClickListener { android.app.AlertDialog.Builder(itemView.context).setTitle("Edit DNC Card").setItems(arrayOf("Rename DNC", "Change Map No.")) { _, which -> edit(file, which == 1) }.show() } else openCard); badge.setOnClickListener(openCard); date.setOnClickListener(openCard); delete?.setOnClickListener { android.app.AlertDialog.Builder(itemView.context).setTitle("Permanently delete DNC card?").setMessage("This cannot be undone. All addresses and supporting information in ${file.title} will be permanently deleted.").setNegativeButton("Cancel", null).setPositiveButton("Delete") { _, _ -> deleted(file) }.show() }; itemView.setOnClickListener(openCard)
-            mapAndDnc?.setOnClickListener { shareMapAndDnc(file) }; share?.setOnClickListener { DncImageExporter.share(itemView.context, file) }
+            title.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0); badge.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
+            title.setOnClickListener(if (editMode) View.OnClickListener { showEditChoices(file) } else openCard); badge.setOnClickListener(openCard); date.setOnClickListener(openCard); itemView.setOnClickListener(openCard)
+            if (editMode) {
+                (share as? android.widget.ImageButton)?.setImageResource(R.drawable.ic_edit)
+                (mapAndDnc as? android.widget.ImageButton)?.setImageResource(R.drawable.ic_delete)
+                (share as? android.widget.ImageButton)?.imageTintList = ColorStateList.valueOf(ContextCompat.getColor(itemView.context, R.color.primary))
+                (mapAndDnc as? android.widget.ImageButton)?.imageTintList = ColorStateList.valueOf(ContextCompat.getColor(itemView.context, R.color.destructive))
+                share?.setOnClickListener { showEditChoices(file) }
+                mapAndDnc?.setOnClickListener { android.app.AlertDialog.Builder(itemView.context).setTitle("Permanently delete DNC card?").setMessage("This cannot be undone. All addresses and supporting information in ${file.title} will be permanently deleted.").setNegativeButton("Cancel", null).setPositiveButton("Delete") { _, _ -> deleted(file) }.show() }
+            } else {
+                (share as? android.widget.ImageButton)?.setImageResource(R.drawable.ic_share)
+                (mapAndDnc as? android.widget.ImageButton)?.setImageResource(R.drawable.ic_document)
+                (share as? android.widget.ImageButton)?.imageTintList = ColorStateList.valueOf(ContextCompat.getColor(itemView.context, R.color.on_surface))
+                (mapAndDnc as? android.widget.ImageButton)?.imageTintList = ColorStateList.valueOf(ContextCompat.getColor(itemView.context, R.color.on_surface))
+                mapAndDnc?.setOnClickListener { shareMapAndDnc(file) }; share?.setOnClickListener { DncImageExporter.share(itemView.context, file) }
+            }
+        }
+        private fun showEditChoices(file: TextFile) {
+            android.app.AlertDialog.Builder(itemView.context)
+                .setTitle("Edit DNC Card")
+                .setItems(arrayOf("Rename DNC", "Change Map No.")) { _, which -> edit(file, which == 1) }
+                .show()
         }
         private fun edit(file: TextFile, number: Boolean) {
             val input = android.widget.EditText(itemView.context).apply { setText(if (number) file.mapNo else file.title); selectAll() }

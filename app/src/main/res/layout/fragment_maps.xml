@@ -3,8 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:paddingStart="20dp"
-    android:paddingEnd="20dp">
+    android:paddingStart="20dp">
 
     <TextView
         android:id="@+id/maps_title"
@@ -21,6 +20,7 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
+        android:layout_marginEnd="20dp"
         android:text="View and share territory maps"
         android:textAppearance="@style/TextAppearance.MapAssist.Body"
         app:layout_constraintEnd_toEndOf="parent"
@@ -29,8 +29,8 @@
     <com.google.android.material.button.MaterialButton
         android:id="@+id/maps_filter_button"
         style="@style/Widget.Material3.Button.IconButton"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
         android:contentDescription="Sort maps"
         app:icon="@drawable/ic_filter"
         app:layout_constraintBottom_toBottomOf="@id/maps_title"
@@ -39,8 +39,9 @@
     <com.google.android.material.button.MaterialButton
         android:id="@+id/maps_help_button"
         style="@style/Widget.Material3.Button.IconButton"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:layout_marginEnd="16dp"
         android:contentDescription="How to add maps"
         app:icon="@drawable/ic_help"
         app:layout_constraintBottom_toBottomOf="@id/maps_title"
@@ -51,7 +52,7 @@
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:layout_marginTop="20dp"
-        android:overScrollMode="never"
+        android:clipChildren="false"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -61,7 +62,9 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clipToPadding="false"
-            android:overScrollMode="never"
+            android:paddingEnd="20dp"
+            android:scrollbarSize="4dp"
+            android:scrollbarStyle="outsideOverlay"
             android:scrollbars="vertical" />
     </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
     <LinearLayout

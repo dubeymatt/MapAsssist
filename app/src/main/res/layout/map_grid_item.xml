@@ -39,6 +39,32 @@
                 android:textSize="64sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:background="@drawable/map_share_actions_background"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/share_map_button"
+                    style="@style/Widget.Material3.Button.IconButton"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="Share map"
+                    app:icon="@drawable/ic_share"
+                    app:iconTint="@color/primary" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/share_map_dnc_button"
+                    style="@style/Widget.Material3.Button.IconButton"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="Share map and DNC card"
+                    app:icon="@drawable/ic_document"
+                    app:iconTint="@color/primary" />
+            </LinearLayout>
         </FrameLayout>
         <LinearLayout
             android:layout_width="match_parent"
@@ -66,29 +92,6 @@
                 android:ellipsize="end"
                 android:maxLines="2"
                 android:textAppearance="@style/TextAppearance.MapAssist.FileTitle" />
-        </LinearLayout>
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:gravity="end"
-            android:orientation="horizontal">
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/share_map_button"
-                style="@style/Widget.Material3.Button.IconButton"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:contentDescription="Share map"
-                app:icon="@drawable/ic_share"
-                app:iconTint="@color/on_surface" />
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/share_map_dnc_button"
-                style="@style/Widget.Material3.Button.IconButton"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:contentDescription="Share map and DNC card"
-                app:icon="@drawable/ic_document"
-                app:iconTint="@color/on_surface" />
         </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

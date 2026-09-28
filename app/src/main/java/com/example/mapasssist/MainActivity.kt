@@ -7,6 +7,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.navigation.findNavController
 import androidx.navigation.fragment.NavHostFragment
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.example.mapasssist.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
@@ -17,6 +19,18 @@ class MainActivity : AppCompatActivity() {
         AppCompatDelegate.setDefaultNightMode(if (getSharedPreferences("map_assist", 0).getBoolean("dark_mode", false)) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        GoogleDriveBackup.scheduleWeekly(this)
+        GoogleDriveBackup.enqueueLaunchCheck(this)?.let { checkId ->
+            WorkManager.getInstance(this).getWorkInfoByIdLiveData(checkId).observe(this) { info ->
+                if (info?.state == WorkInfo.State.SUCCEEDED && info.outputData.getBoolean("newer", false)) {
+                    android.app.AlertDialog.Builder(this)
+                        .setTitle("Newer Google Drive backup found")
+                        .setMessage("Your Google Drive backup is newer than the data on this device. Review it from Settings before making changes here.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }
         setSupportActionBar(binding.toolbar)
         val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment_content_main) as NavHostFragment
         val navController = navHostFragment.navController

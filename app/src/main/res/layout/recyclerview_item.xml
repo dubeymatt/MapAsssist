@@ -9,6 +9,6 @@
         </LinearLayout>
         <ImageButton android:id="@+id/delete_card" android:layout_width="40dp" android:layout_height="48dp" android:background="@android:color/transparent" android:contentDescription="Delete DNC" android:src="@drawable/ic_delete" android:visibility="gone" />
         <ImageButton android:id="@+id/share_card" android:layout_width="40dp" android:layout_height="48dp" android:background="@android:color/transparent" android:contentDescription="Share DNC image" android:src="@drawable/ic_share" />
-        <ImageButton android:id="@+id/share_map_dnc_card" android:layout_width="40dp" android:layout_height="48dp" android:background="@android:color/transparent" android:contentDescription="Share map and DNC card" android:src="@drawable/ic_document" />
+        <ImageButton android:id="@+id/share_map_dnc_card" android:layout_width="40dp" android:layout_height="48dp" android:background="@android:color/transparent" android:contentDescription="Share map and DNC card" android:src="@drawable/ic_document" android:tint="@color/on_surface" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

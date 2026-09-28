@@ -59,6 +59,8 @@ dependencies {
     implementation(libs.androidx.navigation.ui.ktx)
     implementation(libs.androidx.recyclerview)
     implementation(libs.androidx.swipe.refresh)
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.google.play.services.auth)
     implementation(libs.material)
     implementation("androidx.cardview:cardview:1.0.0")
 

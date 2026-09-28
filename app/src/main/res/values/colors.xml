@@ -10,4 +10,5 @@
     <color name="on_surface_variant">#59615D</color>
     <color name="outline_variant">#D9E1DC</color>
     <color name="primary_container">#D6F2E4</color>
+    <color name="destructive">#B3261E</color>
 </resources>

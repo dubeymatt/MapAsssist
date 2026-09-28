@@ -11,6 +11,12 @@ interface TextFileDao {
     @Query("SELECT * FROM text_files WHERE id = :id")
     suspend fun getTextFileById(id: Int): TextFile?
 
+    @Query("SELECT * FROM text_files ORDER BY mapNo COLLATE NOCASE")
+    suspend fun getAllForBackup(): List<TextFile>
+
+    @Query("SELECT MAX(lastModified) FROM text_files")
+    suspend fun latestModified(): Long?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(textFile: TextFile)
 

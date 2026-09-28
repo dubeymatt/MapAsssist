@@ -24,6 +24,7 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
+import androidx.appcompat.widget.SearchView
 import com.example.mapasssist.data.TextFile
 import com.example.mapasssist.data.TextFileViewModel
 import com.example.mapasssist.databinding.FragmentMapsBinding
@@ -40,6 +41,7 @@ class MapsFragment : Fragment() {
     private var dncCards = emptyList<TextFile>()
     private var savedMaps = emptyList<SavedMap>()
     private var sortNumerically = false
+    private var searchQuery = ""
     private val thumbnailCache = mutableMapOf<Uri, Bitmap?>()
 
     private val imagePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { loadMaps() }
@@ -61,6 +63,12 @@ class MapsFragment : Fragment() {
         )
         binding.mapsRecyclerview.layoutManager = GridLayoutManager(requireContext(), 2)
         binding.mapsRecyclerview.adapter = adapter
+        configureToolbarSearch()
+        // Allow the same far-right native scrollbar as the other tabs to draw
+        // through the pull-to-refresh container.
+        binding.mapsRecyclerview.isVerticalScrollBarEnabled = true
+        binding.mapsRecyclerview.scrollBarStyle = View.SCROLLBARS_OUTSIDE_OVERLAY
+        binding.mapsRecyclerview.isScrollbarFadingEnabled = true
         binding.mapsFilterButton.setOnClickListener { showSortMenu(it) }
         binding.mapsHelpButton.setOnClickListener { showMapHelp() }
         binding.mapsRefresh.setOnRefreshListener { loadMaps() }
@@ -130,7 +138,9 @@ class MapsFragment : Fragment() {
         } else {
             slots.sortedBy { it.label.lowercase() }
         }
-        adapter.submit(ordered, afterSubmit)
+        adapter.submit(ordered.filter { slot ->
+            searchQuery.isBlank() || "${slot.card.mapNo} ${slot.label}".contains(searchQuery, ignoreCase = true)
+        }, afterSubmit)
         binding.mapsEmptyView.visibility = if (dncCards.isNotEmpty()) View.GONE else View.VISIBLE
     }
 
@@ -148,6 +158,30 @@ class MapsFragment : Fragment() {
                 true
             }
             show()
+        }
+    }
+
+    private fun configureToolbarSearch() {
+        val toolbar = requireActivity().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
+        toolbar.post {
+            if (_binding == null) return@post
+            toolbar.menu.clear()
+            val searchView = SearchView(requireContext()).apply {
+                queryHint = "Search maps"
+                setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+                    override fun onQueryTextSubmit(query: String) = true
+                    override fun onQueryTextChange(query: String): Boolean { searchQuery = query; submitSlots(); return true }
+                })
+            }
+            toolbar.menu.add("Search").apply {
+                setIcon(R.drawable.ic_search)
+                actionView = searchView
+                setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS or android.view.MenuItem.SHOW_AS_ACTION_COLLAPSE_ACTION_VIEW)
+                setOnActionExpandListener(object : android.view.MenuItem.OnActionExpandListener {
+                    override fun onMenuItemActionExpand(item: android.view.MenuItem): Boolean { toolbar.title = ""; return true }
+                    override fun onMenuItemActionCollapse(item: android.view.MenuItem): Boolean { searchQuery = ""; submitSlots(); toolbar.title = getString(R.string.app_name); return true }
+                })
+            }
         }
     }
 
@@ -230,6 +264,7 @@ class MapsFragment : Fragment() {
     private fun firstNumber(value: String) = Regex("\\d+").find(value)?.value?.toIntOrNull()
 
     override fun onDestroyView() {
+        requireActivity().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar).menu.clear()
         super.onDestroyView()
         _binding = null
     }
