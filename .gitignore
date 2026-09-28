@@ -3,6 +3,7 @@
 /local.properties
 /.idea
 /.artifacts
+/.kotlin
 .DS_Store
 /build
 /captures
