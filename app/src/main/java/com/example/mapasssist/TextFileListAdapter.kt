@@ -13,6 +13,7 @@ import com.example.mapasssist.data.TextFile
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class TextFileListAdapter(private val open: (TextFile) -> Unit, private val updated: (TextFile) -> Unit, private val deleted: (TextFile) -> Unit, private val shareMapAndDnc: (TextFile) -> Unit) : ListAdapter<TextFile, TextFileListAdapter.Holder>(Diff()) {
     private var grid = false
@@ -36,7 +37,7 @@ class TextFileListAdapter(private val open: (TextFile) -> Unit, private val upda
                 (share as? android.widget.ImageButton)?.imageTintList = ColorStateList.valueOf(ContextCompat.getColor(itemView.context, R.color.primary))
                 (mapAndDnc as? android.widget.ImageButton)?.imageTintList = ColorStateList.valueOf(ContextCompat.getColor(itemView.context, R.color.destructive))
                 share?.setOnClickListener { showEditChoices(file) }
-                mapAndDnc?.setOnClickListener { android.app.AlertDialog.Builder(itemView.context).setTitle("Permanently delete DNC card?").setMessage("This cannot be undone. All addresses and supporting information in ${file.title} will be permanently deleted.").setNegativeButton("Cancel", null).setPositiveButton("Delete") { _, _ -> deleted(file) }.show() }
+                mapAndDnc?.setOnClickListener { MaterialAlertDialogBuilder(itemView.context).setTitle("Permanently delete DNC card?").setMessage("This cannot be undone. All addresses and supporting information in ${file.title} will be permanently deleted.").setNegativeButton("Cancel", null).setPositiveButton("Delete") { _, _ -> deleted(file) }.show() }
             } else {
                 (share as? android.widget.ImageButton)?.setImageResource(R.drawable.ic_share)
                 (mapAndDnc as? android.widget.ImageButton)?.setImageResource(R.drawable.ic_document)
@@ -46,14 +47,14 @@ class TextFileListAdapter(private val open: (TextFile) -> Unit, private val upda
             }
         }
         private fun showEditChoices(file: TextFile) {
-            android.app.AlertDialog.Builder(itemView.context)
+            MaterialAlertDialogBuilder(itemView.context)
                 .setTitle("Edit DNC Card")
                 .setItems(arrayOf("Rename DNC", "Change Map No.")) { _, which -> edit(file, which == 1) }
                 .show()
         }
         private fun edit(file: TextFile, number: Boolean) {
             val input = android.widget.EditText(itemView.context).apply { setText(if (number) file.mapNo else file.title); selectAll() }
-            android.app.AlertDialog.Builder(itemView.context).setTitle(if (number) "Edit Map No." else "Rename DNC").setView(input).setNegativeButton("Cancel", null).setPositiveButton("Save") { _, _ -> updated(if (number) file.copy(mapNo = input.text.toString(), lastModified = System.currentTimeMillis()) else file.copy(title = input.text.toString(), lastModified = System.currentTimeMillis())) }.show()
+            MaterialAlertDialogBuilder(itemView.context).setTitle(if (number) "Edit Map No." else "Rename DNC").setView(input).setNegativeButton("Cancel", null).setPositiveButton("Save") { _, _ -> updated(if (number) file.copy(mapNo = input.text.toString(), lastModified = System.currentTimeMillis()) else file.copy(title = input.text.toString(), lastModified = System.currentTimeMillis())) }.show()
         }
     }
     class Diff : DiffUtil.ItemCallback<TextFile>() { override fun areItemsTheSame(a: TextFile, b: TextFile) = a.id == b.id; override fun areContentsTheSame(a: TextFile, b: TextFile) = a == b }

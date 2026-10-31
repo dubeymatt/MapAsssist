@@ -1,6 +1,6 @@
 package com.example.mapasssist
 
-import android.app.AlertDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.content.ContentValues
 import android.content.ClipData
 import android.content.Context
@@ -63,7 +63,7 @@ object DncImageExporter {
         val alreadyExists = exportedFilesExist(context, name)
 
         if (alreadyExists) {
-            AlertDialog.Builder(context)
+            MaterialAlertDialogBuilder(context)
                 .setTitle("Replace existing image?")
                 .setMessage("$name already exists in Downloads/Map Assist. Replacing it cannot be undone.")
                 .setNegativeButton("Cancel", null)

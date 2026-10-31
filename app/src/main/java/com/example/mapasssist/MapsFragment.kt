@@ -12,7 +12,7 @@ import android.util.Size
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.PopupMenu
+import androidx.appcompat.widget.PopupMenu
 import android.widget.ImageView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -25,6 +25,7 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.appcompat.widget.SearchView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.example.mapasssist.data.TextFile
 import com.example.mapasssist.data.TextFileViewModel
 import com.example.mapasssist.databinding.FragmentMapsBinding
@@ -187,7 +188,7 @@ class MapsFragment : Fragment() {
     }
 
     private fun showMapHelp() {
-        android.app.AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Adding territory maps")
             .setMessage(
                 "Add image files using the device Files app. Place them in:\n\n" +
@@ -208,7 +209,7 @@ class MapsFragment : Fragment() {
             android.widget.Toast.makeText(requireContext(), "Add a DNC card before printing", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-        android.app.AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Choose a map to print")
             .setItems(slots.map { "${it.card.mapNo} - ${it.label}" }.toTypedArray()) { _, index ->
                 val slot = slots[index]

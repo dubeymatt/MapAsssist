@@ -9,6 +9,7 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
@@ -70,7 +71,7 @@ class SecondFragment : Fragment() {
         val address = android.widget.EditText(requireContext()).apply { hint = "Address" }
         val info = android.widget.EditText(requireContext()).apply { hint = "Supporting information" }
         val form = android.widget.LinearLayout(requireContext()).apply { orientation = android.widget.LinearLayout.VERTICAL; setPadding(48, 0, 48, 0); addView(date); addView(address); addView(info) }
-        android.app.AlertDialog.Builder(requireContext()).setTitle("Add DNC entry").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Add") { _, _ ->
+        MaterialAlertDialogBuilder(requireContext()).setTitle("Add DNC entry").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Add") { _, _ ->
             val value = date.text.toString(); if (value.isBlank()) Toast.makeText(requireContext(), "DNC was not added: enter a date", Toast.LENGTH_SHORT).show() else if (!value.matches(Regex("(0[1-9]|1[0-2])/\\d{2}"))) Toast.makeText(requireContext(), "DNC was not added: date must be MM/YY", Toast.LENGTH_SHORT).show() else { entries += DncEntry(value, address.text.toString(), info.text.toString()); adapter.notifyItemInserted(entries.lastIndex); autoSave(); Toast.makeText(requireContext(), "DNC added", Toast.LENGTH_SHORT).show() }
         }.show()
     }
@@ -88,7 +89,7 @@ class SecondFragment : Fragment() {
         }
     }
     private fun confirmDelete(adapter: DncEntryAdapter, position: Int) {
-        android.app.AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Delete DNC entry?")
             .setMessage("This entry will be removed when you confirm your edits.")
             .setNegativeButton("Cancel", null)
@@ -96,7 +97,7 @@ class SecondFragment : Fragment() {
             .show()
     }
     private fun showSaveChangesDialog(adapter: DncEntryAdapter, onContinue: () -> Unit) {
-        android.app.AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Save changes?")
             .setMessage("You have unconfirmed changes to this DNC card.")
             .setNegativeButton("Discard") { _, _ ->
@@ -112,7 +113,7 @@ class SecondFragment : Fragment() {
         val address = android.widget.EditText(requireContext()).apply { hint = "Address"; setText(entry.address) }
         val info = android.widget.EditText(requireContext()).apply { hint = "Supporting information"; setText(entry.supportingInformation) }
         val form = android.widget.LinearLayout(requireContext()).apply { orientation = android.widget.LinearLayout.VERTICAL; setPadding(48, 0, 48, 0); addView(date); addView(address); addView(info) }
-        android.app.AlertDialog.Builder(requireContext()).setTitle("Edit DNC entry").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Update") { _, _ ->
+        MaterialAlertDialogBuilder(requireContext()).setTitle("Edit DNC entry").setView(form).setNegativeButton("Cancel", null).setPositiveButton("Update") { _, _ ->
             val value = date.text.toString()
             if (value.isBlank()) Toast.makeText(requireContext(), "DNC was not updated: enter a date", Toast.LENGTH_SHORT).show()
             else if (!value.matches(Regex("(0[1-9]|1[0-2])/\\d{2}"))) Toast.makeText(requireContext(), "DNC was not updated: date must be MM/YY", Toast.LENGTH_SHORT).show()

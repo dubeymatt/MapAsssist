@@ -10,6 +10,7 @@ import androidx.navigation.fragment.NavHostFragment
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.example.mapasssist.databinding.ActivityMainBinding
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
@@ -23,7 +24,7 @@ class MainActivity : AppCompatActivity() {
         GoogleDriveBackup.enqueueLaunchCheck(this)?.let { checkId ->
             WorkManager.getInstance(this).getWorkInfoByIdLiveData(checkId).observe(this) { info ->
                 if (info?.state == WorkInfo.State.SUCCEEDED && info.outputData.getBoolean("newer", false)) {
-                    android.app.AlertDialog.Builder(this)
+                    MaterialAlertDialogBuilder(this)
                         .setTitle("Newer Google Drive backup found")
                         .setMessage("Your Google Drive backup is newer than the data on this device. Review it from Settings before making changes here.")
                         .setPositiveButton("OK", null)

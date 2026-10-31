@@ -1,6 +1,7 @@
 package com.example.mapasssist
 
-import android.app.AlertDialog
+import androidx.appcompat.app.AlertDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -45,7 +46,7 @@ class SettingsFragment : Fragment() {
     private val importFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
         val imported = runCatching { readCsv(uri) }.getOrElse { Toast.makeText(requireContext(), "Could not read this spreadsheet. Export a fresh Map Assist spreadsheet and use that as the template.", Toast.LENGTH_LONG).show(); return@registerForActivityResult }
-        AlertDialog.Builder(requireContext()).setTitle("Import will permanently replace all data").setMessage("This will delete all ${files.size} saved DNC cards and replace them with ${imported.size} cards from the spreadsheet. This cannot be undone.")
+        MaterialAlertDialogBuilder(requireContext()).setTitle("Import will permanently replace all data").setMessage("This will delete all ${files.size} saved DNC cards and replace them with ${imported.size} cards from the spreadsheet. This cannot be undone.")
             .setNegativeButton("Cancel", null).setPositiveButton("Replace all data") { _, _ -> viewModel.replaceAll(imported); Toast.makeText(requireContext(), "DNCs replaced", Toast.LENGTH_SHORT).show() }.show()
     }
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View { _binding = FragmentSettingsBinding.inflate(inflater, container, false); return binding.root }
@@ -83,7 +84,7 @@ class SettingsFragment : Fragment() {
         updateDriveStatus()
     }
     private fun confirmDriveSync() {
-        AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Sync local data to Google Drive?")
             .setMessage("This will overwrite the current Google Drive backup with the DNC cards stored on this device. If you are unsure, export a local spreadsheet backup first.\n\nFor safety, if this device has no DNC cards, its existing Google Drive backup will be restored instead.")
             .setNegativeButton("Cancel", null)
@@ -126,7 +127,7 @@ class SettingsFragment : Fragment() {
     private fun showBackupChoice(backup: GoogleDriveBackup.RemoteBackup) {
         if (_binding == null) return
         val timestamp = SimpleDateFormat("d MMM yyyy, HH:mm", Locale.getDefault()).format(Date(backup.modifiedTime))
-        AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Google Drive backup found")
             .setMessage("A Map Assist backup from $timestamp already exists in Google Drive.\n\nRestore from Google Drive will permanently replace the cards on this device.\n\nKeep local version will permanently overwrite the Google Drive backup with this device's cards.")
             .setNegativeButton("Cancel") { _, _ -> updateDriveStatus() }
@@ -146,7 +147,7 @@ class SettingsFragment : Fragment() {
     }
 
     private fun confirmBackupChoice(title: String, message: String, action: String, confirmed: () -> Unit) {
-        val dialog = AlertDialog.Builder(requireContext())
+        val dialog = MaterialAlertDialogBuilder(requireContext())
             .setTitle(title)
             .setMessage(message)
             .setNegativeButton("Cancel") { _, _ -> updateDriveStatus() }
@@ -198,7 +199,7 @@ class SettingsFragment : Fragment() {
     }
     private fun formatLastSync(time: Long) = java.text.SimpleDateFormat("d MMM yyyy, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(time))
     private fun confirmDisconnect() {
-        AlertDialog.Builder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle("Disconnect Google Drive?")
             .setMessage("Weekly backups will stop on this device. Your existing Map Assist folder and backups in Google Drive will not be deleted.")
             .setNegativeButton("Cancel", null)
