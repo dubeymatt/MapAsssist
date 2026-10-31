@@ -12,7 +12,7 @@
         android:layout_marginTop="12dp"
         android:text="Maps"
         android:textAppearance="@style/TextAppearance.MapAssist.Headline"
-        app:layout_constraintEnd_toStartOf="@id/maps_filter_button"
+        app:layout_constraintEnd_toStartOf="@id/maps_print_button"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
     <TextView
@@ -26,6 +26,16 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/maps_title" />
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/maps_print_button"
+        style="@style/Widget.Material3.Button.IconButton"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:contentDescription="Print map and DNC card"
+        app:icon="@drawable/ic_print_outline"
+        app:layout_constraintBottom_toBottomOf="@id/maps_title"
+        app:layout_constraintEnd_toStartOf="@id/maps_filter_button"
+        app:layout_constraintTop_toTopOf="@id/maps_title" />
     <com.google.android.material.button.MaterialButton
         android:id="@+id/maps_filter_button"
         style="@style/Widget.Material3.Button.IconButton"
@@ -83,7 +93,7 @@
             android:layout_height="64dp"
             android:contentDescription="@null"
             android:src="@drawable/ic_map"
-            android:tint="@color/primary" />
+            app:tint="@color/primary" />
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

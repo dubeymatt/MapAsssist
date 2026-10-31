@@ -11,6 +11,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.net.Uri
 import android.provider.MediaStore
+import android.os.Build
 import androidx.core.content.FileProvider
 import com.example.mapasssist.data.DncEntry
 import com.example.mapasssist.data.DncEntryCodec
@@ -91,7 +92,7 @@ object DncImageExporter {
             put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
             put(MediaStore.MediaColumns.RELATIVE_PATH, "Download/Map Assist/")
         }
-        val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return
+        val uri = context.contentResolver.insert(downloadsUri(), values) ?: return
         context.contentResolver.openOutputStream(uri)?.use { stream ->
             render(file).compress(Bitmap.CompressFormat.PNG, 100, stream)
         }
@@ -102,7 +103,7 @@ object DncImageExporter {
     private fun deletePreviousExports(context: Context, name: String) {
         val stem = name.substringBeforeLast('.')
         context.contentResolver.delete(
-            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            downloadsUri(),
             "${MediaStore.MediaColumns.RELATIVE_PATH}=? AND (${MediaStore.MediaColumns.DISPLAY_NAME}=? OR ${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?)",
             arrayOf("Download/Map Assist/", name, "$stem (%).png")
         )
@@ -111,7 +112,7 @@ object DncImageExporter {
     private fun exportedFilesExist(context: Context, name: String): Boolean {
         val stem = name.substringBeforeLast('.')
         return context.contentResolver.query(
-            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+            downloadsUri(),
             arrayOf(MediaStore.MediaColumns._ID),
             "${MediaStore.MediaColumns.RELATIVE_PATH}=? AND (${MediaStore.MediaColumns.DISPLAY_NAME}=? OR ${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?)",
             arrayOf("Download/Map Assist/", name, "$stem (%).png"),
@@ -220,6 +221,12 @@ object DncImageExporter {
     }
 
     private fun safeName(file: TextFile) = ("${file.mapNo}_${file.title}").replace(Regex("[^A-Za-z0-9_-]"), "_")
+
+    private fun downloadsUri() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        MediaStore.Downloads.EXTERNAL_CONTENT_URI
+    } else {
+        MediaStore.Files.getContentUri("external")
+    }
 
     private fun pngDate(value: String): String {
         val match = Regex("(0?[1-9]|1[0-2])[/.-](\\d{2,4})").find(value) ?: return value

@@ -70,6 +70,7 @@ class MapsFragment : Fragment() {
         binding.mapsRecyclerview.scrollBarStyle = View.SCROLLBARS_OUTSIDE_OVERLAY
         binding.mapsRecyclerview.isScrollbarFadingEnabled = true
         binding.mapsFilterButton.setOnClickListener { showSortMenu(it) }
+        binding.mapsPrintButton.setOnClickListener { showPrintPicker() }
         binding.mapsHelpButton.setOnClickListener { showMapHelp() }
         binding.mapsRefresh.setOnRefreshListener { loadMaps() }
         dncViewModel.allTextFiles.observe(viewLifecycleOwner) {
@@ -196,6 +197,29 @@ class MapsFragment : Fragment() {
                     "The app matches that number to the corresponding DNC card. Return to Map Assist and pull down to refresh the gallery."
             )
             .setPositiveButton("Got it", null)
+            .show()
+    }
+
+    private fun showPrintPicker() {
+        val mapsByNumber = savedMaps.mapNotNull { map -> firstNumber(map.baseName)?.let { it to map } }.toMap()
+        val slots = dncCards.sortedWith(compareBy<TextFile> { firstNumber(it.mapNo) ?: Int.MAX_VALUE }.thenBy { it.title })
+            .map { card -> MapSlot(card, card.title, firstNumber(card.mapNo)?.let(mapsByNumber::get)?.uri) }
+        if (slots.isEmpty()) {
+            android.widget.Toast.makeText(requireContext(), "Add a DNC card before printing", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        android.app.AlertDialog.Builder(requireContext())
+            .setTitle("Choose a map to print")
+            .setItems(slots.map { "${it.card.mapNo} - ${it.label}" }.toTypedArray()) { _, index ->
+                val slot = slots[index]
+                val mapUri = slot.uri
+                if (mapUri == null) {
+                    android.widget.Toast.makeText(requireContext(), "No map image found for ${slot.card.mapNo}", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    MapDncPrintDocumentAdapter(requireContext(), slot.card, mapUri).print()
+                }
+            }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 

@@ -23,7 +23,8 @@ import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.net.URL
 import java.nio.charset.StandardCharsets
-import java.time.Instant
+import java.text.SimpleDateFormat
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.UUID
 
@@ -253,7 +254,7 @@ object GoogleDriveBackup {
         fun modifiedTime(id: String): Long? {
             val response = request("GET", "https://www.googleapis.com/drive/v3/files/$id?fields=modifiedTime", null)
             if (response.code != 200) return null
-            return runCatching { Instant.parse(JSONObject(response.body).getString("modifiedTime")).toEpochMilli() }.getOrNull()
+            return runCatching { parseDriveTime(JSONObject(response.body).getString("modifiedTime")) }.getOrNull()
         }
 
         private fun find(query: String): String? {
@@ -286,6 +287,11 @@ object GoogleDriveBackup {
         }
 
         private fun escapeQuery(value: String) = value.replace("'", "\\'")
+
+        private fun parseDriveTime(value: String): Long {
+            val withoutFraction = value.replace(Regex("\\.\\d+(?=Z$)"), "")
+            return requireNotNull(SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssX", Locale.US).parse(withoutFraction)).time
+        }
     }
 
     private data class HttpResult(val code: Int, val body: String)
