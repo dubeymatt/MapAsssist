@@ -154,7 +154,7 @@ class FirstFragment : Fragment() {
 
     private fun quickAdd() {
         val labels = currentFiles
-            .sortedWith(compareBy<TextFile> { it.mapNo.substringBefore(" ").toIntOrNull() ?: Int.MAX_VALUE }.thenBy { it.mapNo })
+            .sortedWith { first, second -> MapNumber.compare(first.mapNo, second.mapNo) }
             .map { "${it.mapNo} - ${it.title}" }
         val cardAdapter = ArrayAdapter(requireContext(), R.layout.material_dropdown_item, labels)
         val picker = android.widget.AutoCompleteTextView(requireContext()).apply {
@@ -197,11 +197,7 @@ class FirstFragment : Fragment() {
     private fun submitSorted(adapter: TextFileListAdapter) {
         val sorted = when {
             sortAlphabetically -> currentFiles.sortedBy { it.title.lowercase() }
-            sortNumerically -> currentFiles.sortedWith(
-                compareBy<TextFile> {
-                    it.mapNo.substringBefore(" ").toIntOrNull() ?: Int.MAX_VALUE
-                }.thenBy { it.mapNo }
-            )
+            sortNumerically -> currentFiles.sortedWith { first, second -> MapNumber.compare(first.mapNo, second.mapNo) }
             else -> currentFiles.sortedByDescending { it.lastModified }
         }
         adapter.submitList(sorted.filter { file ->

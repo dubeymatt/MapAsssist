@@ -7,11 +7,11 @@ import com.example.mapasssist.data.TextFile
 object BackupCsv {
     fun create(files: List<TextFile>): String = buildString {
         appendLine("DNC Card,Date (MM/YY),Address,Supporting information")
-        files.sortedWith(
-            compareBy<TextFile> { mapNumberForSort(it.mapNo) }
-                .thenBy { it.mapNo.lowercase() }
-                .thenBy { it.title.lowercase() }
-        ).forEach { file ->
+        files.sortedWith(Comparator { first, second ->
+            MapNumber.compare(first.mapNo, second.mapNo)
+                .takeIf { it != 0 }
+                ?: first.title.compareTo(second.title, ignoreCase = true)
+        }).forEach { file ->
             val rows = DncEntryCodec.decode(file.entriesJson)
                 .ifEmpty { listOf(DncEntry(supportingInformation = file.content)) }
             rows.forEachIndexed { index, row ->
@@ -63,10 +63,6 @@ object BackupCsv {
         val text = value.trim()
         val date = if (text.startsWith("=\"") && text.endsWith("\"") && text.length >= 4) text.substring(2, text.length - 1) else text
         return date.replace('.', '/').take(5)
-    }
-
-    private fun mapNumberForSort(value: String): Int {
-        return Regex("\\d+").find(value)?.value?.toIntOrNull() ?: Int.MAX_VALUE
     }
 
     private fun parseRecords(text: String): List<List<String>> {

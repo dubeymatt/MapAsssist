@@ -6,10 +6,11 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 
-/** Finds a manually added map whose filename is its DNC map number (for example 30.png). */
+/** Finds a manually added map whose filename is its exact DNC map number (for example C1.png). */
 object MapFileLocator {
     fun find(context: Context, mapNo: String): Uri? {
-        val number = Regex("\\d+").find(mapNo)?.value ?: return null
+        val identifier = MapNumber.identifier(mapNo)
+        if (identifier.isEmpty()) return null
         val resolver = context.contentResolver
         val collections = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             listOf(MediaStore.Downloads.EXTERNAL_CONTENT_URI, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
@@ -17,11 +18,11 @@ object MapFileLocator {
             listOf(MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
         }
         return collections.firstNotNullOfOrNull { collection ->
-            runCatching { findInCollection(resolver, collection, number) }.getOrNull()
+            runCatching { findInCollection(resolver, collection, identifier) }.getOrNull()
         }
     }
 
-    private fun findInCollection(resolver: ContentResolver, collection: Uri, number: String): Uri? {
+    private fun findInCollection(resolver: ContentResolver, collection: Uri, identifier: String): Uri? {
         val pathSelection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             "${MediaStore.MediaColumns.RELATIVE_PATH}=?"
         } else {
@@ -42,7 +43,7 @@ object MapFileLocator {
             val id = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
             val name = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
             while (cursor.moveToNext()) {
-                if (cursor.getString(name).substringBeforeLast('.') == number) {
+                if (MapNumber.identifier(cursor.getString(name).substringBeforeLast('.')) == identifier) {
                     return@use Uri.withAppendedPath(collection, cursor.getLong(id).toString())
                 }
             }

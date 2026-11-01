@@ -126,16 +126,19 @@ class MapsFragment : Fragment() {
 
     private fun submitSlots(afterSubmit: (() -> Unit)? = null) {
         if (_binding == null || !::adapter.isInitialized) return
-        val mapsByNumber = savedMaps.mapNotNull { map ->
-            firstNumber(map.baseName)?.let { number -> number to map }
-        }.toMap()
+        val mapsByNumber = savedMaps
+            .mapNotNull { map -> MapNumber.identifier(map.baseName).takeIf { it.isNotEmpty() }?.let { it to map } }
+            .toMap()
         val slots = dncCards.map { card ->
-            MapSlot(card, card.title, firstNumber(card.mapNo)?.let(mapsByNumber::get)?.uri)
+            MapSlot(card, card.title, mapsByNumber[MapNumber.identifier(card.mapNo)]?.uri)
         }
         val ordered = if (sortNumerically) {
             slots.sortedWith(
-                compareBy<MapSlot> { firstNumber(it.card.mapNo) ?: Int.MAX_VALUE }
-                    .thenBy { it.label.lowercase() }
+                Comparator { first, second ->
+                    MapNumber.compare(first.card.mapNo, second.card.mapNo)
+                        .takeIf { it != 0 }
+                        ?: first.label.compareTo(second.label, ignoreCase = true)
+                }
             )
         } else {
             slots.sortedBy { it.label.lowercase() }
@@ -194,7 +197,7 @@ class MapsFragment : Fragment() {
                 "Add image files using the device Files app. Place them in:\n\n" +
                     "Downloads/Map Assist/Maps\n\n" +
                     "Name each image with its map number only, for example:\n" +
-                    "30.png\n\n" +
+                    "30.png or C1.png\n\n" +
                     "The app matches that number to the corresponding DNC card. Return to Map Assist and pull down to refresh the gallery."
             )
             .setPositiveButton("Got it", null)
@@ -202,9 +205,11 @@ class MapsFragment : Fragment() {
     }
 
     private fun showPrintPicker() {
-        val mapsByNumber = savedMaps.mapNotNull { map -> firstNumber(map.baseName)?.let { it to map } }.toMap()
-        val slots = dncCards.sortedWith(compareBy<TextFile> { firstNumber(it.mapNo) ?: Int.MAX_VALUE }.thenBy { it.title })
-            .map { card -> MapSlot(card, card.title, firstNumber(card.mapNo)?.let(mapsByNumber::get)?.uri) }
+        val mapsByNumber = savedMaps
+            .mapNotNull { map -> MapNumber.identifier(map.baseName).takeIf { it.isNotEmpty() }?.let { it to map } }
+            .toMap()
+        val slots = dncCards.sortedWith { first, second -> MapNumber.compare(first.mapNo, second.mapNo) }
+            .map { card -> MapSlot(card, card.title, mapsByNumber[MapNumber.identifier(card.mapNo)]?.uri) }
         if (slots.isEmpty()) {
             android.widget.Toast.makeText(requireContext(), "Add a DNC card before printing", android.widget.Toast.LENGTH_SHORT).show()
             return
@@ -285,8 +290,6 @@ class MapsFragment : Fragment() {
             }
         }.orEmpty()
     }
-
-    private fun firstNumber(value: String) = Regex("\\d+").find(value)?.value?.toIntOrNull()
 
     override fun onDestroyView() {
         requireActivity().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar).menu.clear()

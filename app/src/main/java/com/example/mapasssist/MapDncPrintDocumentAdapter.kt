@@ -129,7 +129,7 @@ class MapDncPrintDocumentAdapter(
 
             val dateRight = left + (right - left) * 0.15f
             val addressRight = left + (right - left) * 0.60f
-            val headerHeight = 16f
+            val headerHeight = 18f
             drawHeader(canvas, paint, left, dateRight, addressRight, right, y, headerHeight)
             y += headerHeight
             // Compact print size leaves room for twenty single-line entries
@@ -162,11 +162,14 @@ class MapDncPrintDocumentAdapter(
         paint.style = Paint.Style.STROKE; paint.strokeWidth = 0.7f
         canvas.drawRect(left, top, right, top + height, paint)
         canvas.drawLine(dateRight, top, dateRight, top + height, paint); canvas.drawLine(addressRight, top, addressRight, top + height, paint)
-        paint.style = Paint.Style.FILL; paint.typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
-        paint.textSize = 6.5f
-        center(canvas, paint, "Date", left, dateRight, top, height)
-        center(canvas, paint, "Address", dateRight, addressRight, top, height)
-        center(canvas, paint, "Supporting information", addressRight, right, top, height)
+        paint.style = Paint.Style.FILL
+        paint.typeface = android.graphics.Typeface.DEFAULT_BOLD
+        paint.isFakeBoldText = true
+        paint.textSize = 7f
+        drawCenteredHeaderText(canvas, paint, "Date", left, dateRight, top, height)
+        drawCenteredHeaderText(canvas, paint, "Address", dateRight, addressRight, top, height)
+        drawCenteredHeaderText(canvas, paint, "Supporting information", addressRight, right, top, height)
+        paint.isFakeBoldText = false
     }
 
     private fun drawRow(canvas: Canvas, paint: Paint, date: String, address: List<String>, info: List<String>, left: Float, dateRight: Float, addressRight: Float, right: Float, top: Float, height: Float, lineHeight: Float) {
@@ -182,6 +185,12 @@ class MapDncPrintDocumentAdapter(
     private fun center(canvas: Canvas, paint: Paint, text: String, left: Float, right: Float, top: Float, height: Float) {
         paint.textAlign = Paint.Align.CENTER
         canvas.drawText(text, (left + right) / 2f, top + (height - paint.fontMetrics.descent + paint.fontMetrics.ascent) / 2f, paint)
+    }
+
+    private fun drawCenteredHeaderText(canvas: Canvas, paint: Paint, text: String, left: Float, right: Float, top: Float, height: Float) {
+        paint.textAlign = Paint.Align.CENTER
+        val baseline = top + height / 2f - (paint.fontMetrics.ascent + paint.fontMetrics.descent) / 2f
+        canvas.drawText(text, (left + right) / 2f, baseline, paint)
     }
 
     private fun drawLines(canvas: Canvas, paint: Paint, lines: List<String>, x: Float, top: Float, height: Float, lineHeight: Float) {
