@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
+import androidx.navigation.fragment.findNavController
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
 import com.example.mapasssist.data.DncEntry
@@ -58,10 +59,13 @@ class SettingsFragment : Fragment() {
         preferences.edit().remove("settings_scroll_y").apply()
         binding.root.post { binding.root.scrollTo(0, restoreScrollY) }
         binding.darkModeSwitch.isChecked = preferences.getBoolean("dark_mode", false)
+        applyAccentControls()
         binding.darkModeSwitch.setOnCheckedChangeListener { _, enabled ->
             preferences.edit().putBoolean("dark_mode", enabled).apply()
             AppCompatDelegate.setDefaultNightMode(if (enabled) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO)
         }
+        binding.coloursButton.setOnClickListener { findNavController().navigate(R.id.action_SettingsFragment_to_ColoursFragment) }
+        binding.coloursButton.iconTint = android.content.res.ColorStateList.valueOf(AccentPreferences.control(requireContext()))
         binding.openDownloadsButton.setOnClickListener {
             val intent = android.content.Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS)
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -196,6 +200,31 @@ class SettingsFragment : Fragment() {
             preferences.getLong("drive_last_backup", 0) > 0 -> "Weekly backups are on. Last synced ${formatLastSync(preferences.getLong("drive_last_backup", 0))}."
             else -> "Google Drive is connected. Choose which version to keep before backups start."
         }
+    }
+    private fun applyAccentControls() {
+        val accent = AccentPreferences.control(requireContext())
+        val onAccent = android.graphics.Color.WHITE
+        fun solid(button: com.google.android.material.button.MaterialButton) {
+            button.backgroundTintList = android.content.res.ColorStateList.valueOf(accent)
+            button.setTextColor(onAccent)
+            button.iconTint = android.content.res.ColorStateList.valueOf(onAccent)
+        }
+        fun outlined(button: com.google.android.material.button.MaterialButton) {
+            button.strokeColor = android.content.res.ColorStateList.valueOf(accent)
+            button.setTextColor(accent)
+            button.iconTint = android.content.res.ColorStateList.valueOf(accent)
+        }
+        solid(binding.exportButton)
+        solid(binding.googleDriveSyncButton)
+        outlined(binding.importButton)
+        outlined(binding.coloursButton)
+        binding.openDownloadsButton.setTextColor(accent)
+        binding.openDownloadsButton.iconTint = android.content.res.ColorStateList.valueOf(accent)
+        binding.googleDriveDisconnectButton.setTextColor(accent)
+        binding.googleDriveDisconnectButton.iconTint = android.content.res.ColorStateList.valueOf(accent)
+        val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+        binding.darkModeSwitch.thumbTintList = android.content.res.ColorStateList(states, intArrayOf(accent, ContextCompat.getColor(requireContext(), R.color.on_surface_variant)))
+        binding.darkModeSwitch.trackTintList = android.content.res.ColorStateList(states, intArrayOf(AccentPreferences.primaryContainer(requireContext()), ContextCompat.getColor(requireContext(), R.color.outline_variant)))
     }
     private fun formatLastSync(time: Long) = java.text.SimpleDateFormat("d MMM yyyy, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(time))
     private fun confirmDisconnect() {

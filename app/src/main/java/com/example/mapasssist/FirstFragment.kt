@@ -84,6 +84,10 @@ class FirstFragment : Fragment() {
         binding.viewToggle.check(if (savedGrid) R.id.grid_view_button else R.id.list_view_button)
         binding.recyclerview.layoutManager = if (savedGrid) GridLayoutManager(requireContext(), 2) else LinearLayoutManager(requireContext())
         adapter.setGridMode(savedGrid)
+        applyViewToggleAccent(if (savedGrid) R.id.grid_view_button else R.id.list_view_button)
+        val appAccent = AccentPreferences.control(requireContext())
+        binding.editCardsButton.iconTint = ColorStateList.valueOf(appAccent)
+        binding.filterButton.iconTint = ColorStateList.valueOf(appAccent)
 
         binding.viewToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (!isChecked) return@addOnButtonCheckedListener
@@ -91,6 +95,7 @@ class FirstFragment : Fragment() {
             preferences.edit().putBoolean("grid_view", grid).apply()
             binding.recyclerview.layoutManager = if (grid) GridLayoutManager(requireContext(), 2) else LinearLayoutManager(requireContext())
             adapter.setGridMode(grid)
+            applyViewToggleAccent(checkedId)
         }
 
         binding.editCardsButton.setOnClickListener {
@@ -98,7 +103,7 @@ class FirstFragment : Fragment() {
             else MaterialAlertDialogBuilder(requireContext()).setTitle("Enable edit mode?").setMessage("Renaming or deleting DNC cards makes permanent changes to your saved data.").setNegativeButton("Cancel", null).setPositiveButton("Continue") { _, _ ->
                 adapter.editMode = true
                 binding.editCardsButton.setIconResource(R.drawable.ic_check)
-                binding.editCardsButton.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(requireContext(), R.color.primary))
+                binding.editCardsButton.backgroundTintList = ColorStateList.valueOf(AccentPreferences.control(requireContext()))
                 binding.editCardsButton.iconTint = ColorStateList.valueOf(ContextCompat.getColor(requireContext(), R.color.on_primary))
                 addButton.extend()
                 configureAddButton(adapter, true)
@@ -128,6 +133,18 @@ class FirstFragment : Fragment() {
             if (!adapter.editMode) currentFiles = files
             submitSorted(adapter)
             binding.emptyView.visibility = if (currentFiles.isEmpty()) View.VISIBLE else View.GONE
+        }
+    }
+
+    private fun applyViewToggleAccent(selectedId: Int) {
+        val accent = AccentPreferences.control(requireContext())
+        val surface = ContextCompat.getColor(requireContext(), R.color.surface_container)
+        listOf(R.id.list_view_button, R.id.grid_view_button).forEach { id ->
+            binding.viewToggle.findViewById<com.google.android.material.button.MaterialButton>(id).apply {
+                val selected = id == selectedId
+                backgroundTintList = ColorStateList.valueOf(if (selected) AccentPreferences.primaryContainer(requireContext()) else surface)
+                iconTint = ColorStateList.valueOf(accent)
+            }
         }
     }
 
@@ -195,6 +212,7 @@ class FirstFragment : Fragment() {
     }
 
     private fun submitSorted(adapter: TextFileListAdapter) {
+        adapter.setGroupMapNumbers(currentFiles.map { it.mapNo })
         val sorted = when {
             sortAlphabetically -> currentFiles.sortedBy { it.title.lowercase() }
             sortNumerically -> currentFiles.sortedWith { first, second -> MapNumber.compare(first.mapNo, second.mapNo) }
@@ -243,7 +261,7 @@ class FirstFragment : Fragment() {
         adapter.editMode = false
         binding.editCardsButton.setIconResource(R.drawable.ic_edit)
         binding.editCardsButton.backgroundTintList = ColorStateList.valueOf(android.graphics.Color.TRANSPARENT)
-        binding.editCardsButton.iconTint = ColorStateList.valueOf(ContextCompat.getColor(requireContext(), R.color.primary))
+        binding.editCardsButton.iconTint = ColorStateList.valueOf(AccentPreferences.control(requireContext()))
         requireActivity().findViewById<com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton>(R.id.add_fab).extend()
         configureAddButton(adapter, false)
     }

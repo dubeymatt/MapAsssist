@@ -2,6 +2,8 @@ package com.example.mapasssist
 
 import android.os.Bundle
 import android.view.View
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
@@ -20,6 +22,7 @@ class MainActivity : AppCompatActivity() {
         AppCompatDelegate.setDefaultNightMode(if (getSharedPreferences("map_assist", 0).getBoolean("dark_mode", false)) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        applyAccent()
         GoogleDriveBackup.scheduleWeekly(this)
         GoogleDriveBackup.enqueueLaunchCheck(this)?.let { checkId ->
             WorkManager.getInstance(this).getWorkInfoByIdLiveData(checkId).observe(this) { info ->
@@ -78,5 +81,19 @@ class MainActivity : AppCompatActivity() {
     override fun onSupportNavigateUp(): Boolean {
         val navController = findNavController(R.id.nav_host_fragment_content_main)
         return navController.navigateUp() || super.onSupportNavigateUp()
+    }
+    private fun applyAccent() {
+        val accent = AccentPreferences.primary(this)
+        binding.addFab.backgroundTintList = ColorStateList.valueOf(accent)
+        binding.addFab.iconTint = ColorStateList.valueOf(Color.WHITE)
+        binding.addFab.setTextColor(Color.WHITE)
+        val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
+        val dark = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val selectedContent = if (dark) Color.WHITE else accent
+        binding.bottomNavigation.itemIconTintList = ColorStateList(states, intArrayOf(selectedContent, getColor(R.color.on_surface_variant)))
+        binding.bottomNavigation.itemTextColor = ColorStateList(states, intArrayOf(selectedContent, getColor(R.color.on_surface_variant)))
+        binding.bottomNavigation.itemActiveIndicatorColor = ColorStateList.valueOf(
+            if (dark) accent else AccentPreferences.primaryContainer(this)
+        )
     }
 }

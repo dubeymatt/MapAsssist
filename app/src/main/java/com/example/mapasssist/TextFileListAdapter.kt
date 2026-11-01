@@ -17,9 +17,17 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class TextFileListAdapter(private val open: (TextFile) -> Unit, private val updated: (TextFile) -> Unit, private val deleted: (TextFile) -> Unit, private val shareMapAndDnc: (TextFile) -> Unit) : ListAdapter<TextFile, TextFileListAdapter.Holder>(Diff()) {
     private var grid = false
+    private var groupIndices = emptyMap<String, Int>()
     var editMode = false
         set(value) { field = value; notifyDataSetChanged() }
     fun setGridMode(enabled: Boolean) { if (grid != enabled) { grid = enabled; notifyDataSetChanged() } }
+    fun setGroupMapNumbers(mapNumbers: Iterable<String>) {
+        val updated = MapGroupAccent.groupIndices(mapNumbers)
+        if (groupIndices != updated) {
+            groupIndices = updated
+            notifyDataSetChanged()
+        }
+    }
     override fun getItemViewType(position: Int) = if (grid) 1 else 0
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(LayoutInflater.from(parent.context).inflate(if (viewType == 1) R.layout.recyclerview_grid_item else R.layout.recyclerview_item, parent, false))
     override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(getItem(position))
@@ -27,6 +35,7 @@ class TextFileListAdapter(private val open: (TextFile) -> Unit, private val upda
         private val title = view.findViewById<TextView>(R.id.textViewTitle); private val date = view.findViewById<TextView>(R.id.textViewDate); private val badge = view.findViewById<TextView>(R.id.map_number_badge); private val delete = view.findViewById<View?>(R.id.delete_card); private val mapAndDnc = view.findViewById<View?>(R.id.share_map_dnc_card); private val share = view.findViewById<View?>(R.id.share_card); private val actions = view.findViewById<View?>(R.id.card_actions)
         fun bind(file: TextFile) {
             title.text = file.title; badge.text = file.mapNo; date.text = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(file.lastModified)); delete?.visibility = View.GONE; actions?.visibility = View.VISIBLE; mapAndDnc?.visibility = View.VISIBLE; share?.visibility = View.VISIBLE
+            MapGroupAccent.applyTo(badge, file.mapNo, groupIndices)
             val openCard = View.OnClickListener { if (!editMode) open(file) }
             title.isClickable = true; badge.isClickable = true; date.isClickable = true; itemView.isClickable = true
             title.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0); badge.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
@@ -34,7 +43,7 @@ class TextFileListAdapter(private val open: (TextFile) -> Unit, private val upda
             if (editMode) {
                 (share as? android.widget.ImageButton)?.setImageResource(R.drawable.ic_edit)
                 (mapAndDnc as? android.widget.ImageButton)?.setImageResource(R.drawable.ic_delete)
-                (share as? android.widget.ImageButton)?.imageTintList = ColorStateList.valueOf(ContextCompat.getColor(itemView.context, R.color.primary))
+                (share as? android.widget.ImageButton)?.imageTintList = ColorStateList.valueOf(AccentPreferences.control(itemView.context))
                 (mapAndDnc as? android.widget.ImageButton)?.imageTintList = ColorStateList.valueOf(ContextCompat.getColor(itemView.context, R.color.destructive))
                 share?.setOnClickListener { showEditChoices(file) }
                 mapAndDnc?.setOnClickListener { MaterialAlertDialogBuilder(itemView.context).setTitle("Permanently delete DNC card?").setMessage("This cannot be undone. All addresses and supporting information in ${file.title} will be permanently deleted.").setNegativeButton("Cancel", null).setPositiveButton("Delete") { _, _ -> deleted(file) }.show() }

@@ -14,6 +14,8 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import androidx.activity.OnBackPressedCallback
+import android.content.res.ColorStateList
+import androidx.core.content.ContextCompat
 import com.example.mapasssist.data.DncEntry
 import com.example.mapasssist.data.DncEntryCodec
 import com.example.mapasssist.data.TextFile
@@ -57,6 +59,7 @@ class SecondFragment : Fragment() {
             }
         }
         binding.addEntryButton.text = "Add DNC"
+        applyAccentControls()
         binding.addEntryButton.setOnClickListener { if (adapter.editMode) setEntryEditMode(adapter, false) else showAddDialog(adapter) }
         binding.editEntriesButton.setOnClickListener { setEntryEditMode(adapter, true) }
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, object : OnBackPressedCallback(true) {
@@ -65,6 +68,13 @@ class SecondFragment : Fragment() {
                 else { isEnabled = false; requireActivity().onBackPressedDispatcher.onBackPressed() }
             }
         })
+    }
+    private fun applyAccentControls() {
+        val accent = AccentPreferences.control(requireContext())
+        binding.editEntriesButton.iconTint = ColorStateList.valueOf(accent)
+        binding.addEntryButton.backgroundTintList = ColorStateList.valueOf(accent)
+        binding.addEntryButton.iconTint = ColorStateList.valueOf(ContextCompat.getColor(requireContext(), R.color.on_primary))
+        binding.addEntryButton.setTextColor(ContextCompat.getColor(requireContext(), R.color.on_primary))
     }
     private fun showAddDialog(adapter: DncEntryAdapter) {
         val now = java.util.Calendar.getInstance(); val date = android.widget.EditText(requireContext()).apply { hint = "Date (MM/YY)"; setText("%02d/%02d".format(now.get(java.util.Calendar.MONTH) + 1, now.get(java.util.Calendar.YEAR) % 100)); inputType = android.text.InputType.TYPE_CLASS_DATETIME or android.text.InputType.TYPE_DATETIME_VARIATION_DATE; setOnClickListener { MonthYearPicker.show(requireContext()) { setText(it) } } }
@@ -83,7 +93,7 @@ class SecondFragment : Fragment() {
             text = if (enabled) "Confirm" else "Add DNC"
             setIconResource(if (enabled) R.drawable.ic_check else R.drawable.ic_add)
             layoutParams = layoutParams.apply { width = ViewGroup.LayoutParams.WRAP_CONTENT }
-            backgroundTintList = android.content.res.ColorStateList.valueOf(androidx.core.content.ContextCompat.getColor(requireContext(), R.color.primary))
+            backgroundTintList = android.content.res.ColorStateList.valueOf(AccentPreferences.control(requireContext()))
             iconTint = android.content.res.ColorStateList.valueOf(androidx.core.content.ContextCompat.getColor(requireContext(), R.color.on_primary))
             requestLayout()
         }

@@ -2,6 +2,7 @@ package com.example.mapasssist
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -64,6 +65,11 @@ class MapsFragment : Fragment() {
         )
         binding.mapsRecyclerview.layoutManager = GridLayoutManager(requireContext(), 2)
         binding.mapsRecyclerview.adapter = adapter
+        val appAccent = AccentPreferences.control(requireContext())
+        binding.mapsFilterButton.iconTint = ColorStateList.valueOf(appAccent)
+        binding.mapsPrintButton.iconTint = ColorStateList.valueOf(appAccent)
+        binding.mapsHelpButton.iconTint = ColorStateList.valueOf(appAccent)
+        binding.mapsRefresh.setColorSchemeColors(appAccent)
         configureToolbarSearch()
         // Allow the same far-right native scrollbar as the other tabs to draw
         // through the pull-to-refresh container.
@@ -126,6 +132,7 @@ class MapsFragment : Fragment() {
 
     private fun submitSlots(afterSubmit: (() -> Unit)? = null) {
         if (_binding == null || !::adapter.isInitialized) return
+        adapter.setGroupMapNumbers(dncCards.map { it.mapNo })
         val mapsByNumber = savedMaps
             .mapNotNull { map -> MapNumber.identifier(map.baseName).takeIf { it.isNotEmpty() }?.let { it to map } }
             .toMap()
@@ -307,7 +314,16 @@ private class MapSlotAdapter(
     private val sharedWithDnc: (MapSlot) -> Unit,
     private val thumbnailLoader: (Uri, ImageView) -> Unit
 ) : ListAdapter<MapSlot, MapSlotAdapter.Holder>(Diff()) {
+    private var groupIndices = emptyMap<String, Int>()
+
     fun submit(slots: List<MapSlot>, afterSubmit: (() -> Unit)? = null) = submitList(slots, afterSubmit)
+    fun setGroupMapNumbers(mapNumbers: Iterable<String>) {
+        val updated = MapGroupAccent.groupIndices(mapNumbers)
+        if (groupIndices != updated) {
+            groupIndices = updated
+            notifyDataSetChanged()
+        }
+    }
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(MapGridItemBinding.inflate(LayoutInflater.from(parent.context), parent, false))
     override fun onBindViewHolder(holder: Holder, position: Int) = holder.bind(getItem(position))
 
@@ -315,6 +331,10 @@ private class MapSlotAdapter(
         fun bind(slot: MapSlot) {
             binding.mapName.text = slot.label
             binding.mapNumber.text = slot.card.mapNo
+            MapGroupAccent.applyTo(binding.mapNumber, slot.card.mapNo, groupIndices)
+            val actionColor = MapGroupAccent.applyToShareOverlay(binding.mapShareActions, slot.card.mapNo, groupIndices)
+            binding.shareMapButton.iconTint = ColorStateList.valueOf(actionColor)
+            binding.shareMapDncButton.iconTint = ColorStateList.valueOf(actionColor)
             if (slot.uri != null) thumbnailLoader(slot.uri, binding.mapThumbnail) else binding.mapThumbnail.setImageDrawable(null)
             binding.mapPlaceholder.visibility = if (slot.uri == null) View.VISIBLE else View.GONE
             binding.shareMapButton.visibility = if (slot.uri != null) View.VISIBLE else View.GONE

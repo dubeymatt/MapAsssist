@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true" android:padding="24dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingBottom="32dp">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Colours" android:textAppearance="@style/TextAppearance.MapAssist.Headline" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Choose accent colours for app controls and map groups." android:textAppearance="@style/TextAppearance.MapAssist.Body" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="28dp" android:text="App accent" android:textAppearance="@style/TextAppearance.MapAssist.FileTitle" />
+        <com.google.android.material.button.MaterialButton android:id="@+id/primary_colour_button" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="App accent colour" />
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="28dp" android:text="DNC letter groups" android:textAppearance="@style/TextAppearance.MapAssist.FileTitle" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="Only groups currently used by your DNC cards are shown. Automatic colours adjust when groups are added or removed." android:textAppearance="@style/TextAppearance.MapAssist.Body" />
+        <LinearLayout android:id="@+id/group_colour_container" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:orientation="vertical" />
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>
