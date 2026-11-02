@@ -9,7 +9,7 @@ data class AccentChoice(val label: String, val hue: Float, val primary: Int)
 /** Persisted colour choices used by the app controls and optional map-series overrides. */
 object AccentPreferences {
     val choices = listOf(
-        AccentChoice("Map Assist green", 164f, Color.rgb(13, 94, 78)),
+        AccentChoice("Green", 164f, Color.rgb(13, 94, 78)),
         AccentChoice("Blue", 210f, Color.rgb(33, 88, 150)),
         AccentChoice("Purple", 275f, Color.rgb(104, 63, 145)),
         AccentChoice("Golden yellow", 47f, Color.rgb(125, 91, 18)),
@@ -43,7 +43,7 @@ object AccentPreferences {
     }
     fun groupName(context: Context, prefix: String, automaticIndex: Int): String {
         val selected = context.getSharedPreferences("map_assist", 0).getInt(GROUP + prefix, -1)
-        return if (selected in choices.indices) choices[selected].label else if (prefix.isEmpty()) "Map Assist green" else "Automatic"
+        return if (selected in choices.indices) choices[selected].label else if (prefix.isEmpty()) "Green" else "Automatic"
     }
     fun setGroup(context: Context, prefix: String, index: Int?) = context.getSharedPreferences("map_assist", 0).edit()
         .putInt(GROUP + prefix, index ?: -1).apply()

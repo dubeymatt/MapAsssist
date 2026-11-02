@@ -73,6 +73,7 @@ class MainActivity : AppCompatActivity() {
             binding.toolbar.title = when (destination.id) {
                 R.id.FirstFragment -> getString(R.string.app_name)
                 R.id.SettingsFragment -> "Settings"
+                R.id.ColoursFragment -> "Settings"
                 R.id.MapsFragment -> getString(R.string.app_name)
                 else -> getString(R.string.second_fragment_label)
             }
