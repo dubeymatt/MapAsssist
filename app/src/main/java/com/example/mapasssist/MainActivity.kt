@@ -5,9 +5,11 @@ import android.view.View
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.widget.Toast
+import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.navigation.findNavController
+import androidx.navigation.NavOptions
 import androidx.navigation.fragment.NavHostFragment
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -16,6 +18,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
+    private var activeTabDestination = R.id.FirstFragment
+    private var pendingTabDirection = 0
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(R.style.Theme_MapAsssist)
         super.onCreate(savedInstanceState)
@@ -46,23 +50,34 @@ class MainActivity : AppCompatActivity() {
         binding.bottomNavigation.selectedItemId = R.id.navigation_dncs
         binding.bottomNavigation.setOnItemSelectedListener { item ->
             when (item.itemId) {
-                R.id.navigation_maps -> { if (navController.currentDestination?.id != R.id.MapsFragment) navController.navigate(R.id.MapsFragment); true }
-                R.id.navigation_dncs -> { if (navController.currentDestination?.id != R.id.FirstFragment) navController.popBackStack(R.id.FirstFragment, false); true }
-                R.id.navigation_settings -> { navController.navigate(R.id.SettingsFragment); true }
+                R.id.navigation_maps -> { selectTab(navController, R.id.MapsFragment); true }
+                R.id.navigation_dncs -> { selectTab(navController, R.id.FirstFragment); true }
+                R.id.navigation_ledger -> { selectTab(navController, R.id.LedgerFragment); true }
+                R.id.navigation_settings -> { selectTab(navController, R.id.SettingsFragment); true }
                 else -> false
             }
         }
         navController.addOnDestinationChangedListener { _, destination, _ ->
             val isDncPage = destination.id == R.id.FirstFragment
-            if (!isDncPage) binding.toolbar.menu.clear()
+            // Maps owns a search action too. Do not clear it after that fragment has
+            // populated the toolbar, otherwise the icon briefly appears then vanishes.
+            if (!isDncPage && destination.id != R.id.MapsFragment) binding.toolbar.menu.clear()
             val selectedTab = when (destination.id) {
                 R.id.FirstFragment -> R.id.navigation_dncs
                 R.id.MapsFragment -> R.id.navigation_maps
                 R.id.SettingsFragment -> R.id.navigation_settings
+                R.id.LedgerFragment -> R.id.navigation_ledger
                 else -> null
             }
-            selectedTab?.let { binding.bottomNavigation.menu.findItem(it).isChecked = true }
-            val isTabPage = isDncPage || destination.id == R.id.SettingsFragment || destination.id == R.id.MapsFragment
+            selectedTab?.let {
+                binding.bottomNavigation.menu.findItem(it).isChecked = true
+                activeTabDestination = destination.id
+                if (pendingTabDirection != 0) {
+                    animateTabContent(pendingTabDirection)
+                    pendingTabDirection = 0
+                }
+            }
+            val isTabPage = isDncPage || destination.id == R.id.SettingsFragment || destination.id == R.id.MapsFragment || destination.id == R.id.LedgerFragment
             val content = binding.root.findViewById<View>(R.id.content_main_root)
             content.layoutParams = (content.layoutParams as android.view.ViewGroup.MarginLayoutParams).apply {
                 bottomMargin = if (isTabPage) (80 * resources.displayMetrics.density).toInt() else 0
@@ -73,6 +88,7 @@ class MainActivity : AppCompatActivity() {
             binding.toolbar.title = when (destination.id) {
                 R.id.FirstFragment -> getString(R.string.app_name)
                 R.id.SettingsFragment -> "Settings"
+                R.id.LedgerFragment -> getString(R.string.app_name)
                 R.id.ColoursFragment -> "Settings"
                 R.id.MapsFragment -> getString(R.string.app_name)
                 else -> getString(R.string.second_fragment_label)
@@ -96,5 +112,46 @@ class MainActivity : AppCompatActivity() {
         binding.bottomNavigation.itemActiveIndicatorColor = ColorStateList.valueOf(
             if (dark) accent else AccentPreferences.primaryContainer(this)
         )
+    }
+
+    private fun selectTab(navController: androidx.navigation.NavController, destination: Int) {
+        if (activeTabDestination == destination) return
+        val movingRight = tabIndex(destination) > tabIndex(activeTabDestination)
+        pendingTabDirection = if (movingRight) 1 else -1
+        navController.navigate(destination, null, NavOptions.Builder()
+            .setLaunchSingleTop(true)
+            .setRestoreState(true)
+            .setPopUpTo(navController.graph.startDestinationId, false, true)
+            // State restoration has inconsistent enter/pop callbacks. The consistent
+            // directional animation is applied below after the destination changes.
+            .setEnterAnim(0)
+            .setExitAnim(0)
+            .setPopEnterAnim(0)
+            .setPopExitAnim(0)
+            .build())
+    }
+
+    private fun animateTabContent(direction: Int) {
+        val content = binding.root.findViewById<View>(R.id.nav_host_fragment_content_main)
+        content.post {
+            val distance = content.width * 0.055f * direction
+            content.animate().cancel()
+            content.translationX = distance
+            content.alpha = 0f
+            content.animate()
+                .translationX(0f)
+                .alpha(1f)
+                .setDuration(190L)
+                .setInterpolator(FastOutSlowInInterpolator())
+                .start()
+        }
+    }
+
+    private fun tabIndex(destination: Int): Int = when (destination) {
+        R.id.MapsFragment -> 0
+        R.id.FirstFragment -> 1
+        R.id.LedgerFragment -> 2
+        R.id.SettingsFragment -> 3
+        else -> 1
     }
 }

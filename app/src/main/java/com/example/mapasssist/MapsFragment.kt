@@ -44,6 +44,8 @@ class MapsFragment : Fragment() {
     private var savedMaps = emptyList<SavedMap>()
     private var sortNumerically = false
     private var searchQuery = ""
+    private var mapsLoaded = false
+    private var mapsLoadScheduled = false
     private val thumbnailCache = mutableMapOf<Uri, Bitmap?>()
 
     private val imagePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { loadMaps() }
@@ -79,33 +81,43 @@ class MapsFragment : Fragment() {
         binding.mapsFilterButton.setOnClickListener { showSortMenu(it) }
         binding.mapsPrintButton.setOnClickListener { showPrintPicker() }
         binding.mapsHelpButton.setOnClickListener { showMapHelp() }
-        binding.mapsRefresh.setOnRefreshListener { loadMaps() }
+        binding.mapsRefresh.setOnRefreshListener { loadMaps(force = true) }
         dncViewModel.allTextFiles.observe(viewLifecycleOwner) {
             dncCards = it
             submitSlots()
         }
         // Maps are added directly through the device Files app. The optional image
         // permission lets the gallery discover those files in Downloads.
-        loadMaps()
+        scheduleInitialMapsLoad()
         if (!hasImagePermission()) imagePermission.launch(requiredImagePermission())
     }
 
     override fun onResume() {
         super.onResume()
-        if (_binding != null) loadMaps()
+        configureToolbarSearch()
+        if (_binding != null && !mapsLoaded && !mapsLoadScheduled) scheduleInitialMapsLoad()
     }
 
     private fun hasImagePermission() = ContextCompat.checkSelfPermission(requireContext(), requiredImagePermission()) == PackageManager.PERMISSION_GRANTED
     private fun requiredImagePermission() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
 
-    private fun loadMaps() {
+    private fun loadMaps(force: Boolean = false) {
+        if (mapsLoaded && !force) return
+        mapsLoadScheduled = false
         viewLifecycleOwner.lifecycleScope.launch {
             savedMaps = withContext(Dispatchers.IO) { runCatching { readSavedMaps() }.getOrDefault(emptyList()) }
+            mapsLoaded = true
             if (_binding != null) {
                 submitSlots()
                 binding.mapsRefresh.isRefreshing = false
             }
         }
+    }
+
+    private fun scheduleInitialMapsLoad() {
+        mapsLoadScheduled = true
+        // Let the tab transition finish before reading Downloads and decoding thumbnails.
+        binding.root.postDelayed({ if (_binding != null && !mapsLoaded) loadMaps() }, 220L)
     }
 
     private fun loadThumbnail(uri: Uri, imageView: ImageView) {
@@ -175,17 +187,16 @@ class MapsFragment : Fragment() {
 
     private fun configureToolbarSearch() {
         val toolbar = requireActivity().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
-        toolbar.post {
-            if (_binding == null) return@post
-            toolbar.menu.clear()
-            val searchView = SearchView(requireContext()).apply {
+        if (_binding == null || findNavController().currentDestination?.id != R.id.MapsFragment) return
+        toolbar.menu.clear()
+        val searchView = SearchView(requireContext()).apply {
                 queryHint = "Search maps"
                 setOnQueryTextListener(object : SearchView.OnQueryTextListener {
                     override fun onQueryTextSubmit(query: String) = true
                     override fun onQueryTextChange(query: String): Boolean { searchQuery = query; submitSlots(); return true }
                 })
-            }
-            toolbar.menu.add("Search").apply {
+        }
+        toolbar.menu.add("Search").apply {
                 setIcon(R.drawable.ic_search)
                 actionView = searchView
                 setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS or android.view.MenuItem.SHOW_AS_ACTION_COLLAPSE_ACTION_VIEW)
@@ -193,7 +204,6 @@ class MapsFragment : Fragment() {
                     override fun onMenuItemActionExpand(item: android.view.MenuItem): Boolean { toolbar.title = ""; return true }
                     override fun onMenuItemActionCollapse(item: android.view.MenuItem): Boolean { searchQuery = ""; submitSlots(); toolbar.title = getString(R.string.app_name); return true }
                 })
-            }
         }
     }
 
@@ -299,7 +309,10 @@ class MapsFragment : Fragment() {
     }
 
     override fun onDestroyView() {
-        requireActivity().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar).menu.clear()
+        // Do not clear a menu that the arriving DNC tab has already installed.
+        if (findNavController().currentDestination?.id == R.id.MapsFragment) {
+            requireActivity().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar).menu.clear()
+        }
         super.onDestroyView()
         _binding = null
     }

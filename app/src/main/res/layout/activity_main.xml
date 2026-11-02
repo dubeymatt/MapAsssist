@@ -45,6 +45,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:background="@color/surface_container"
+        app:labelVisibilityMode="labeled"
         app:itemActiveIndicatorStyle="@style/Widget.MapAssist.NavigationBar.ActiveIndicator"
         app:itemIconTint="@color/navigation_item_state"
         app:itemTextColor="@color/navigation_item_state"

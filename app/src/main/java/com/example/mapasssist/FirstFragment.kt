@@ -33,6 +33,7 @@ class FirstFragment : Fragment() {
     private var sortAlphabetically = false
     private var sortNumerically = false
     private var currentFiles = emptyList<TextFile>()
+    private var cardAdapter: TextFileListAdapter? = null
     private var searchQuery = ""
     private val stagedUpdates = mutableMapOf<Int, TextFile>()
     private val stagedDeletes = mutableMapOf<Int, TextFile>()
@@ -58,6 +59,7 @@ class FirstFragment : Fragment() {
             }
             findNavController().navigate(R.id.action_FirstFragment_to_SecondFragment, bundle)
         }, { stageUpdate(adapter, it) }, { stageDelete(adapter, it) }, { file -> shareMapAndDnc(file) })
+        cardAdapter = adapter
         binding.recyclerview.adapter = adapter
         val addButton = requireActivity().findViewById<com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton>(R.id.add_fab)
         var fabTransitioning = false
@@ -77,8 +79,6 @@ class FirstFragment : Fragment() {
                 }
             }
         })
-        binding.recyclerview.alpha = 0f
-        binding.recyclerview.animate().alpha(1f).setDuration(180).start()
         configureToolbarMenu(adapter)
         val savedGrid = preferences.getBoolean("grid_view", false)
         binding.viewToggle.check(if (savedGrid) R.id.grid_view_button else R.id.list_view_button)
@@ -279,17 +279,16 @@ class FirstFragment : Fragment() {
 
     private fun configureToolbarMenu(adapter: TextFileListAdapter) {
         val toolbar = requireActivity().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar)
-        toolbar.post {
-            if (_binding == null) return@post
-            toolbar.menu.clear()
-            val searchView = SearchView(requireContext()).apply {
+        if (_binding == null || findNavController().currentDestination?.id != R.id.FirstFragment) return
+        toolbar.menu.clear()
+        val searchView = SearchView(requireContext()).apply {
                 queryHint = "Search DNC cards"
                 setOnQueryTextListener(object : SearchView.OnQueryTextListener {
                     override fun onQueryTextSubmit(query: String) = true
                     override fun onQueryTextChange(query: String): Boolean { searchQuery = query; submitSorted(adapter); return true }
                 })
-            }
-            toolbar.menu.add("Search").apply {
+        }
+        toolbar.menu.add("Search").apply {
                 setIcon(R.drawable.ic_search)
                 actionView = searchView
                 setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS or android.view.MenuItem.SHOW_AS_ACTION_COLLAPSE_ACTION_VIEW)
@@ -297,12 +296,12 @@ class FirstFragment : Fragment() {
                     override fun onMenuItemActionExpand(item: android.view.MenuItem): Boolean { toolbar.title = ""; return true }
                     override fun onMenuItemActionCollapse(item: android.view.MenuItem): Boolean { searchQuery = ""; submitSorted(adapter); toolbar.title = getString(R.string.app_name); return true }
                 })
-            }
-            toolbar.menu.add("Export all…").apply {
+        }
+        toolbar.menu.add("Export all…").apply {
                 setIcon(R.drawable.ic_more)
                 setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
-            }
-            toolbar.setOnMenuItemClickListener {
+        }
+        toolbar.setOnMenuItemClickListener {
                 if (it.title == "Export all…") {
                     MaterialAlertDialogBuilder(requireContext())
                         .setTitle("Export all DNC cards?")
@@ -312,13 +311,21 @@ class FirstFragment : Fragment() {
                         .show()
                     true
                 } else false
-            }
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        view?.post { cardAdapter?.let(::configureToolbarMenu) }
+    }
+
     override fun onDestroyView() {
-        requireActivity().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar).menu.clear()
+        // Do not clear a menu that the arriving Maps tab has already installed.
+        if (findNavController().currentDestination?.id == R.id.FirstFragment) {
+            requireActivity().findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbar).menu.clear()
+        }
         super.onDestroyView()
         _binding = null
+        cardAdapter = null
     }
 }

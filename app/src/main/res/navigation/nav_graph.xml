@@ -33,6 +33,7 @@
     <fragment android:id="@+id/SettingsFragment" android:name="com.example.mapasssist.SettingsFragment" android:label="Settings" tools:layout="@layout/fragment_settings">
         <action android:id="@+id/action_SettingsFragment_to_ColoursFragment" app:destination="@id/ColoursFragment" />
     </fragment>
+    <fragment android:id="@+id/LedgerFragment" android:name="com.example.mapasssist.LedgerFragment" android:label="Ledger" tools:layout="@layout/fragment_ledger" />
     <fragment android:id="@+id/ColoursFragment" android:name="com.example.mapasssist.ColoursFragment" android:label="Colours" tools:layout="@layout/fragment_colours" />
     <fragment android:id="@+id/MapsFragment" android:name="com.example.mapasssist.MapsFragment" android:label="Maps" tools:layout="@layout/fragment_maps">
         <action android:id="@+id/action_MapsFragment_to_MapViewerFragment" app:destination="@id/MapViewerFragment" />
