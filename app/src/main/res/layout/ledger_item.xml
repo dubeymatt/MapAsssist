@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="6dp" app:cardBackgroundColor="@color/surface_container" app:cardCornerRadius="14dp" app:cardElevation="0dp" app:strokeColor="@color/outline_variant" app:strokeWidth="1dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="62dp" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="8dp">
+            <TextView android:id="@+id/ledger_map_number" android:layout_width="46dp" android:layout_height="46dp" android:background="@drawable/file_icon_background" android:gravity="center" android:maxLines="2" android:padding="3dp" android:textColor="@color/primary" android:textSize="15sp" android:textStyle="bold" />
+            <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_weight="1" android:orientation="vertical">
+                <TextView android:id="@+id/ledger_map_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:ellipsize="end" android:maxLines="1" android:textAppearance="@style/TextAppearance.MapAssist.FileTitle" />
+                <TextView android:id="@+id/ledger_current" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:ellipsize="end" android:maxLines="1" android:textAppearance="@style/TextAppearance.MapAssist.FileMeta" />
+            </LinearLayout>
+            <com.google.android.material.button.MaterialButton android:id="@+id/ledger_assign" android:layout_width="58dp" android:layout_height="match_parent" android:paddingStart="13dp" android:paddingEnd="7dp" android:contentDescription="Assign map" android:insetTop="0dp" android:insetBottom="0dp" app:cornerRadius="0dp" app:icon="@drawable/ic_add" app:iconGravity="textStart" app:iconTint="@color/on_primary" />
+        </LinearLayout>
+        <LinearLayout android:id="@+id/ledger_history" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:layout_marginTop="2dp" android:layout_marginEnd="8dp" android:layout_marginBottom="8dp" android:orientation="vertical" android:visibility="gone" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

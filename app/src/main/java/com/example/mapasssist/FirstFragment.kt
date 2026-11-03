@@ -114,9 +114,10 @@ class FirstFragment : Fragment() {
 
         binding.filterButton.setOnClickListener { anchor ->
             PopupMenu(requireContext(), anchor).apply {
-                menu.add(0, 1, 0, "Date edited")
-                menu.add(0, 2, 1, "Alphabetically")
-                menu.add(0, 3, 2, "Numerically")
+                menu.add(0, 1, 0, "Date edited").isChecked = !sortAlphabetically && !sortNumerically
+                menu.add(0, 2, 1, "Alphabetically").isChecked = sortAlphabetically
+                menu.add(0, 3, 2, "Numerically").isChecked = sortNumerically
+                menu.setGroupCheckable(0, true, true)
                 setOnMenuItemClickListener { item ->
                     sortAlphabetically = item.itemId == 2
                     sortNumerically = item.itemId == 3

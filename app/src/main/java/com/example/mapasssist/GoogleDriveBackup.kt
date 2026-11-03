@@ -127,16 +127,17 @@ object GoogleDriveBackup {
         val account = GoogleSignIn.getLastSignedInAccount(context)
             ?: error("Connect a Google account first")
         val token = GoogleAuthUtil.getToken(context, requireNotNull(account.account), "oauth2:$DRIVE_SCOPE")
-        val restored = BackupCsv.parse(DriveRest(token).downloadCsv(remote.id))
-        check(restored.isNotEmpty()) { "Google Drive backup contains no DNC cards" }
-        AppDatabase.getDatabase(context).textFileDao().replaceAll(restored)
+        val restored = BackupCsv.parseBundle(DriveRest(token).downloadCsv(remote.id))
+        check(restored.files.isNotEmpty()) { "Google Drive backup contains no DNC cards" }
+        AppDatabase.getDatabase(context).textFileDao().replaceAll(restored.files)
+        LedgerStore.replace(context, restored.assignments)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString("drive_backup_file_id", remote.id)
             .putLong("drive_last_backup", System.currentTimeMillis())
             .putBoolean("drive_backup_newer", false)
             .apply()
         setSyncConfigured(context)
-        "Restored ${restored.size} DNC cards from Google Drive"
+        "Restored ${restored.files.size} DNC cards from Google Drive"
     }
 
     suspend fun upload(context: Context): String = withContext(Dispatchers.IO) {
@@ -155,7 +156,7 @@ object GoogleDriveBackup {
             ?.takeIf { drive.fileExists(it) }
             ?: drive.findFile(BACKUP_NAME, folderId)
         val files = AppDatabase.getDatabase(context).textFileDao().getAllForBackup()
-        val updated = drive.uploadCsv(fileId, folderId, BackupCsv.create(files))
+        val updated = drive.uploadCsv(fileId, folderId, BackupCsv.create(files, LedgerStore.read(context)))
         preferences.edit()
             .putString("drive_backup_file_id", updated)
             .putLong("drive_last_backup", System.currentTimeMillis())
@@ -205,7 +206,7 @@ object GoogleDriveBackup {
             ?: preferences.getString("drive_folder_id", null)?.let { drive.findFile(BACKUP_NAME, it) }
             ?: return@withContext false
         val remoteModified = drive.modifiedTime(remoteId) ?: return@withContext false
-        val localModified = AppDatabase.getDatabase(context).textFileDao().latestModified() ?: 0L
+        val localModified = maxOf(AppDatabase.getDatabase(context).textFileDao().latestModified() ?: 0L, LedgerStore.lastModified(context))
         // A successful upload naturally makes the Drive file newer than the most
         // recent card edit. Only warn when it changed *after this device synced.
         val lastSynced = preferences.getLong("drive_last_backup", 0L)

@@ -61,7 +61,7 @@ class MainActivity : AppCompatActivity() {
             val isDncPage = destination.id == R.id.FirstFragment
             // Maps owns a search action too. Do not clear it after that fragment has
             // populated the toolbar, otherwise the icon briefly appears then vanishes.
-            if (!isDncPage && destination.id != R.id.MapsFragment) binding.toolbar.menu.clear()
+            if (!isDncPage && destination.id != R.id.MapsFragment && destination.id != R.id.LedgerFragment) binding.toolbar.menu.clear()
             val selectedTab = when (destination.id) {
                 R.id.FirstFragment -> R.id.navigation_dncs
                 R.id.MapsFragment -> R.id.navigation_maps

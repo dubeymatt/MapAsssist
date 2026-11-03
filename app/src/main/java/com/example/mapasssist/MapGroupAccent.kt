@@ -11,6 +11,8 @@ import java.util.Locale
 
 /** Gives the letter-prefixed map series currently in use distinct, muted badge colours. */
 object MapGroupAccent {
+    /** Ledger-only territories such as L1B use their own independently configurable colour. */
+    const val BUSINESS_GROUP = "__ledger_business__"
     // The first current letter group is blue, the next purple, then yellow, and so on.
     private val groupHues = floatArrayOf(210f, 275f, 47f, 20f, 335f, 175f, 100f, 250f)
 
@@ -45,7 +47,11 @@ object MapGroupAccent {
         return foreground
     }
 
-    private fun colorsFor(context: Context, mapNumber: String, groups: Map<String, Int>): Pair<Int, Int> {
+    /** Background and foreground used by a card's map-number badge. */
+    fun colorsFor(context: Context, mapNumber: String, groups: Map<String, Int>): Pair<Int, Int> {
+        if (isBusinessMap(mapNumber)) {
+            return mutedColors(context, AccentPreferences.groupHue(context, BUSINESS_GROUP, 0))
+        }
         val prefix = prefixOf(mapNumber)
         val groupIndex = prefix?.let(groups::get)
         if (prefix == null) {
@@ -71,9 +77,14 @@ object MapGroupAccent {
             Color.HSVToColor(floatArrayOf(hue, if (dark) 0.55f else 0.62f, foregroundLightness))
     }
 
-    private fun prefixOf(mapNumber: String): String? = Regex("^\\s*([A-Za-z]+)\\d")
+    fun prefixOf(mapNumber: String): String? = Regex("^\\s*([A-Za-z]+)\\d")
         .find(mapNumber)
         ?.groupValues
         ?.get(1)
         ?.uppercase(Locale.ROOT)
+
+    fun groupKey(mapNumber: String): String = if (isBusinessMap(mapNumber)) BUSINESS_GROUP else prefixOf(mapNumber).orEmpty()
+
+    fun isBusinessMap(mapNumber: String): Boolean = Regex("^\\s*[A-Za-z]*\\d+B\\s*$", RegexOption.IGNORE_CASE)
+        .matches(mapNumber)
 }

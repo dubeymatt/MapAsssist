@@ -39,7 +39,10 @@ object AccentPreferences {
 
     fun groupHue(context: Context, prefix: String, automaticIndex: Int): Float {
         val selected = context.getSharedPreferences("map_assist", 0).getInt(GROUP + prefix, -1)
-        return if (selected in choices.indices) choices[selected].hue else if (prefix.isEmpty()) 164f else MapGroupAccent.automaticHue(automaticIndex)
+        return if (selected in choices.indices) choices[selected].hue
+        else if (prefix.isEmpty()) 164f
+        else if (prefix == MapGroupAccent.BUSINESS_GROUP) 20f
+        else MapGroupAccent.automaticHue(automaticIndex)
     }
     fun groupName(context: Context, prefix: String, automaticIndex: Int): String {
         val selected = context.getSharedPreferences("map_assist", 0).getInt(GROUP + prefix, -1)

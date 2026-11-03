@@ -170,8 +170,9 @@ class MapsFragment : Fragment() {
 
     private fun showSortMenu(anchor: View) {
         PopupMenu(requireContext(), anchor).apply {
-            menu.add(0, 1, 0, "Alphabetically")
-            menu.add(0, 2, 1, "Numerically")
+            menu.add(0, 1, 0, "Alphabetically").isChecked = !sortNumerically
+            menu.add(0, 2, 1, "Numerically").isChecked = sortNumerically
+            menu.setGroupCheckable(0, true, true)
             setOnMenuItemClickListener {
                 sortNumerically = it.itemId == 2
                 requireContext().getSharedPreferences("map_assist", 0)
