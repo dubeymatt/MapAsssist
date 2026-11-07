@@ -12,15 +12,61 @@
         android:background="@color/surface"
         android:elevation="0dp">
 
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
+        <FrameLayout
             android:layout_width="match_parent"
-            android:layout_height="88dp"
-            android:paddingTop="30dp"
-            android:paddingStart="8dp"
-            android:paddingEnd="4dp"
-            app:title="@string/app_name"
-            app:titleTextAppearance="@style/TextAppearance.MapAssist.Toolbar" />
+            android:layout_height="88dp">
+
+            <com.google.android.material.appbar.MaterialToolbar
+                android:id="@+id/toolbar"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:paddingTop="30dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="4dp"
+                app:title="@string/app_name"
+                app:titleTextAppearance="@style/TextAppearance.MapAssist.Toolbar" />
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/shared_sync_pill"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_gravity="center"
+                android:layout_marginTop="12dp"
+                android:minWidth="36dp"
+                android:visibility="gone"
+                app:cardBackgroundColor="@color/primary_container"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="0dp">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                android:id="@+id/shared_sync_content"
+                    android:paddingStart="11dp"
+                    android:paddingEnd="11dp">
+
+                    <ImageView
+                        android:id="@+id/shared_sync_icon"
+                        android:layout_width="19dp"
+                        android:layout_height="19dp"
+                        android:contentDescription="Sync status"
+                        android:src="@drawable/ic_cloud_backup" />
+
+                    <TextView
+                        android:id="@+id/shared_sync_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="7dp"
+                        android:fontFamily="sans"
+                        android:textColor="@color/on_surface"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </FrameLayout>
 
     </com.google.android.material.appbar.AppBarLayout>
 

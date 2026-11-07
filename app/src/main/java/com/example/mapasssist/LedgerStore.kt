@@ -34,7 +34,7 @@ object LedgerStore {
         }
     }.getOrDefault(emptyList())
 
-    fun replace(context: Context, assignments: List<LedgerAssignment>) {
+    fun replace(context: Context, assignments: List<LedgerAssignment>, notifySharedSync: Boolean = true) {
         val json = JSONArray()
         assignments.forEach { assignment ->
             json.put(JSONObject().apply {
@@ -45,6 +45,7 @@ object LedgerStore {
         }
         context.getSharedPreferences("map_assist", 0).edit()
             .putString(KEY, json.toString()).putLong(MODIFIED, System.currentTimeMillis()).apply()
+        if (notifySharedSync) GoogleDriveBackup.queueAutomaticSharedSync(context)
     }
 
     fun lastModified(context: Context) = context.getSharedPreferences("map_assist", 0).getLong(MODIFIED, 0L)

@@ -3,6 +3,7 @@ package com.example.mapasssist
 import android.os.Bundle
 import android.view.View
 import android.content.res.ColorStateList
+import android.content.SharedPreferences
 import android.graphics.Color
 import android.widget.Toast
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator
@@ -13,6 +14,7 @@ import androidx.navigation.NavOptions
 import androidx.navigation.fragment.NavHostFragment
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import androidx.core.graphics.ColorUtils
 import com.example.mapasssist.databinding.ActivityMainBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
@@ -20,6 +22,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var activeTabDestination = R.id.FirstFragment
     private var pendingTabDirection = 0
+    private var syncPillAction: Runnable? = null
+    private val sharedSyncListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "shared_library_state" || key == "shared_library_file_id") updateSharedSyncPill()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(R.style.Theme_MapAsssist)
         super.onCreate(savedInstanceState)
@@ -27,21 +34,21 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         applyAccent()
-        GoogleDriveBackup.scheduleWeekly(this)
-        GoogleDriveBackup.enqueueLaunchCheck(this)?.let { checkId ->
-            WorkManager.getInstance(this).getWorkInfoByIdLiveData(checkId).observe(this) { info ->
-                if (info?.state == WorkInfo.State.SUCCEEDED && info.outputData.getBoolean("newer", false)) {
-                    MaterialAlertDialogBuilder(this)
-                        .setTitle("Newer Google Drive backup found")
-                        .setMessage("Your Google Drive backup is newer than the data on this device. Review it from Settings before making changes here.")
-                        .setPositiveButton("OK", null)
-                        .show()
-                }
-            }
-        }
+        getSharedPreferences("map_assist", MODE_PRIVATE).registerOnSharedPreferenceChangeListener(sharedSyncListener)
+        // Do not replay a past success merely because this activity was
+        // recreated for a local appearance change.
+        updateSharedSyncPill(showStoredSuccess = false)
+        GoogleDriveBackup.disableLegacyWeeklyBackups(this)
+        // Shared syncing is queued only by data edits. In particular, activity
+        // recreation after changing colours or dark mode must stay local.
         setSupportActionBar(binding.toolbar)
         val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment_content_main) as NavHostFragment
         val navController = navHostFragment.navController
+        binding.sharedSyncPill.setOnClickListener {
+            if (GoogleDriveBackup.sharedSyncState(this) in setOf("pending", "failed", "conflict", "missing")) {
+                selectTab(navController, R.id.SettingsFragment)
+            }
+        }
         binding.addFab.setOnClickListener { navController.navigate(R.id.action_FirstFragment_to_SecondFragment) }
         binding.toolbar.setNavigationOnClickListener {
             val editor = supportFragmentManager.findFragmentById(R.id.nav_host_fragment_content_main)?.childFragmentManager?.fragments?.filterIsInstance<SecondFragment>()?.firstOrNull()
@@ -98,6 +105,128 @@ class MainActivity : AppCompatActivity() {
     override fun onSupportNavigateUp(): Boolean {
         val navController = findNavController(R.id.nav_host_fragment_content_main)
         return navController.navigateUp() || super.onSupportNavigateUp()
+    }
+
+    override fun onDestroy() {
+        syncPillAction?.let { binding.sharedSyncPill.removeCallbacks(it) }
+        getSharedPreferences("map_assist", MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(sharedSyncListener)
+        super.onDestroy()
+    }
+
+    /** Keeps background sync feedback visible without turning the toolbar into a progress screen. */
+    private fun updateSharedSyncPill(showStoredSuccess: Boolean = true) {
+        if (!::binding.isInitialized || !GoogleDriveBackup.isSharedLibraryConfigured(this)) {
+            hideSharedSyncPill(immediate = true)
+            updateSettingsSyncBadge()
+            return
+        }
+        when (GoogleDriveBackup.sharedSyncState(this)) {
+            "pending" -> showSharedSyncPill("Sync pending", R.drawable.ic_cloud_backup, Color.rgb(168, 122, 20), false, true, true)
+            "syncing" -> showSharedSyncPill("Syncing", R.drawable.ic_cloud_backup, AccentPreferences.primary(this), false)
+            "synced" -> if (showStoredSuccess) showSharedSyncPill("Synced", R.drawable.ic_check, AccentPreferences.primary(this), true) else hideSharedSyncPill(immediate = true)
+            "failed" -> showSharedSyncPill("Sync failed", R.drawable.ic_cloud_backup, getColor(R.color.destructive), false, true, true)
+            "conflict" -> showSharedSyncPill("Sync needs attention", R.drawable.ic_cloud_backup, getColor(R.color.destructive), false, true, true)
+            "missing" -> showSharedSyncPill("Shared file missing", R.drawable.ic_cloud_backup, getColor(R.color.destructive), false, true, true)
+            else -> hideSharedSyncPill(immediate = true)
+        }
+        updateSettingsSyncBadge()
+    }
+
+    private fun showSharedSyncPill(text: String, icon: Int, tint: Int, dismissWhenIdle: Boolean, collapseText: Boolean = false, collapseToCircle: Boolean = false) {
+        syncPillAction?.let { binding.sharedSyncPill.removeCallbacks(it) }
+        syncPillAction = null
+        binding.sharedSyncPill.apply {
+            minimumWidth = dp(72)
+            binding.sharedSyncContent.setPadding(dp(11), 0, dp(11), 0)
+            setCardBackgroundColor(ColorStateList.valueOf(syncPillBackground(tint)))
+            binding.sharedSyncIcon.setImageResource(icon)
+            binding.sharedSyncIcon.imageTintList = ColorStateList.valueOf(tint)
+            binding.sharedSyncLabel.apply {
+                this.text = text
+                alpha = 1f
+                visibility = View.VISIBLE
+                setTextColor(if (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES) Color.WHITE else getColor(R.color.on_surface))
+            }
+            if (visibility != View.VISIBLE) {
+                visibility = View.VISIBLE
+                alpha = 0f
+                scaleX = 0.82f
+                scaleY = 0.82f
+                animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(180L)
+                    .setInterpolator(FastOutSlowInInterpolator()).start()
+            }
+        }
+        if (dismissWhenIdle) {
+            val dismiss = Runnable { hideSharedSyncPill(immediate = false) }
+            syncPillAction = dismiss
+            binding.sharedSyncPill.postDelayed(dismiss, 2_200L)
+        } else if (collapseText) {
+            val collapse = Runnable { collapseSharedSyncPill(collapseToCircle) }
+            syncPillAction = collapse
+            binding.sharedSyncPill.postDelayed(collapse, 2_500L)
+        }
+    }
+
+    private fun collapseSharedSyncPill(toCircle: Boolean) {
+        syncPillAction = null
+        if (binding.sharedSyncPill.visibility != View.VISIBLE || binding.sharedSyncLabel.visibility != View.VISIBLE) return
+        binding.sharedSyncLabel.animate().alpha(0f).setDuration(150L).withEndAction {
+            binding.sharedSyncLabel.visibility = View.GONE
+            if (toCircle) {
+                binding.sharedSyncPill.minimumWidth = dp(36)
+                binding.sharedSyncContent.setPadding(dp(8), 0, dp(8), 0)
+            }
+            binding.sharedSyncPill.animate().scaleX(0.9f).scaleY(0.9f).setDuration(130L)
+                .withEndAction {
+                    binding.sharedSyncPill.scaleX = 1f
+                    binding.sharedSyncPill.scaleY = 1f
+                }.start()
+        }.start()
+    }
+
+    private fun hideSharedSyncPill(immediate: Boolean) {
+        syncPillAction?.let { binding.sharedSyncPill.removeCallbacks(it) }
+        syncPillAction = null
+        if (binding.sharedSyncPill.visibility != View.VISIBLE) return
+        if (immediate) {
+            binding.sharedSyncPill.visibility = View.GONE
+            return
+        }
+        binding.sharedSyncLabel.animate().alpha(0f).setDuration(120L).start()
+        binding.sharedSyncPill.animate()
+            .scaleX(0.72f)
+            .scaleY(0.72f)
+            .alpha(0f)
+            .setStartDelay(100L)
+            .setDuration(220L)
+            .setInterpolator(FastOutSlowInInterpolator())
+            .withEndAction {
+                binding.sharedSyncPill.visibility = View.GONE
+                binding.sharedSyncPill.alpha = 1f
+                binding.sharedSyncPill.scaleX = 1f
+                binding.sharedSyncPill.scaleY = 1f
+            }
+            .start()
+    }
+
+    private fun syncPillBackground(tint: Int): Int {
+        val dark = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
+        return ColorUtils.blendARGB(tint, if (dark) Color.rgb(39, 45, 42) else Color.WHITE, if (dark) 0.70f else 0.84f)
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun updateSettingsSyncBadge() {
+        val state = GoogleDriveBackup.sharedSyncState(this)
+        val needsAttention = state in setOf("pending", "failed", "conflict", "missing")
+        val badge = binding.bottomNavigation.getOrCreateBadge(R.id.navigation_settings)
+        badge.backgroundColor = getColor(R.color.destructive)
+        badge.clearNumber()
+        // A blank text badge uses the larger badge geometry while remaining a
+        // clean red notification dot.
+        badge.setText(" ")
+        badge.setBadgeTextColor(Color.TRANSPARENT)
+        badge.isVisible = needsAttention
     }
     private fun applyAccent() {
         val accent = AccentPreferences.primary(this)

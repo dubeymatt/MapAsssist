@@ -126,6 +126,7 @@ class LedgerFragment : Fragment() {
                 else -> "${prefix}1"
             }
             val (background, foreground) = MapGroupAccent.colorsFor(requireContext(), mapNumber, groupIndices)
+            val isHidden = prefix in hiddenGroups
             val button = MaterialButton(requireContext()).apply {
                 text = when (prefix) { "" -> "42"; MapGroupAccent.BUSINESS_GROUP -> "B"; else -> prefix }
                 contentDescription = "Show or hide ${when (prefix) { "" -> "numbered"; MapGroupAccent.BUSINESS_GROUP -> "B-suffix"; else -> prefix }} maps"
@@ -138,14 +139,17 @@ class LedgerFragment : Fragment() {
                 insetBottom = 0
                 cornerRadius = dp(12)
                 setPadding(dp(10), 0, dp(10), 0)
+                // Keep the muted version of this group's own colour when it
+                // is hidden; rebuilding after each tap prevents a stale tint.
                 backgroundTintList = ColorStateList.valueOf(background)
                 setTextColor(foreground)
-                alpha = if (prefix in hiddenGroups) 0.42f else 1f
+                alpha = if (isHidden) 0.42f else 1f
                 setOnClickListener {
                     hiddenGroups = if (prefix in hiddenGroups) hiddenGroups - prefix else hiddenGroups + prefix
                     requireContext().getSharedPreferences("map_assist", 0).edit()
                         .putStringSet("ledger_hidden_groups", hiddenGroups)
                         .apply()
+                    groupFilterSignature = null
                     ledgerAdapter?.let(::render)
                 }
             }
