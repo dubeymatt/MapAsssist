@@ -11,8 +11,10 @@ android {
         applicationId = "com.example.mapasssist"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // Keep this value in step with each distributed build; the Settings
+        // screen reads it directly from BuildConfig.
+        versionCode = 97
+        versionName = "0.9.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -30,6 +32,7 @@ android {
     }
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 }
 

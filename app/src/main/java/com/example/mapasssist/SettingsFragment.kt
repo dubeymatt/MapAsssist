@@ -38,7 +38,7 @@ class SettingsFragment : Fragment() {
     private var restoreScrollY = 0
     private val exportFile = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         uri ?: return@registerForActivityResult
-        requireContext().contentResolver.openOutputStream(uri)?.use { stream -> OutputStreamWriter(stream).use { it.write(BackupCsv.create(files, LedgerStore.read(requireContext()))) } }
+        requireContext().contentResolver.openOutputStream(uri)?.use { stream -> OutputStreamWriter(stream).use { it.write(BackupCsv.create(files, LedgerStore.read(requireContext()), SharedActivityStore.read(requireContext()))) } }
         Toast.makeText(requireContext(), "Spreadsheet exported", Toast.LENGTH_SHORT).show()
     }
     private val googleDriveSignIn = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -75,6 +75,7 @@ class SettingsFragment : Fragment() {
                 Toast.makeText(requireContext(), "Could not open the Files app", Toast.LENGTH_SHORT).show()
             }
         }
+        binding.openDriveButton.setOnClickListener { openDriveFolder() }
         binding.googleAccountButton.setOnClickListener {
             if (!GoogleDriveBackup.hasConnectedAccount(requireContext())) googleDriveSignIn.launch(GoogleDriveBackup.signInIntent(requireContext()))
         }
@@ -105,6 +106,7 @@ class SettingsFragment : Fragment() {
         updateGoogleAccount()
         updateDriveStatus()
         updateSharedLibraryStatus()
+        binding.settingsVersion.text = "Version ${BuildConfig.VERSION_NAME}"
         settleSwitchAnimations()
     }
     private fun confirmDriveSync() {
@@ -258,6 +260,19 @@ class SettingsFragment : Fragment() {
             .show()
     }
 
+    private fun openDriveFolder() {
+        val folderId = requireContext().getSharedPreferences("map_assist", 0).getString("drive_folder_id", null)
+        if (folderId.isNullOrBlank()) {
+            Toast.makeText(requireContext(), "The Map Assist Drive folder will be created when you first save a backup or shared library.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW,
+            android.net.Uri.parse("https://drive.google.com/drive/folders/$folderId"))
+        runCatching { startActivity(intent) }.getOrElse {
+            Toast.makeText(requireContext(), "Could not open Google Drive", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun createSharedLibrary() {
         if (!GoogleDriveBackup.hasConnectedAccount(requireContext())) {
             Toast.makeText(requireContext(), "Sign in to a Google account at the top of Settings first", Toast.LENGTH_LONG).show()
@@ -308,13 +323,25 @@ class SettingsFragment : Fragment() {
 
     private fun showSharedLibraryChoice(remote: GoogleDriveBackup.RemoteBackup) {
         val timestamp = formatLastSync(remote.modifiedTime)
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Shared library connected")
-            .setMessage("The shared library was last updated $timestamp. Download shared library replaces this device's data. Upload local data replaces the shared library for everyone.")
-            .setNegativeButton("Cancel") { _, _ -> updateSharedLibraryStatus() }
-            .setNeutralButton("Upload local data") { _, _ -> confirmSharedOverwrite(enableAutoSync = true) }
-            .setPositiveButton("Download shared library") { _, _ -> downloadSharedLibrary(remote, enableAutoSync = true) }
-            .show()
+        var joining = true
+        val dialog = MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Download shared library to join")
+            .setMessage("The owner’s shared library was last updated $timestamp.\n\nTo join, Map Assist will download that library and permanently replace the DNC cards and Ledger data currently on this device. The shared library will not be changed.\n\nIf you want to keep this device’s local data, cancel and export a local backup first.")
+            .setNegativeButton("Cancel joining") { _, _ -> cancelPendingSharedJoin() }
+            .setPositiveButton("Download and join") { _, _ ->
+                joining = false
+                downloadSharedLibrary(remote, enableAutoSync = true)
+            }
+            .create()
+        dialog.setOnCancelListener {
+            if (joining) cancelPendingSharedJoin()
+        }
+        dialog.show()
+    }
+
+    private fun cancelPendingSharedJoin() {
+        GoogleDriveBackup.disconnectSharedLibrary(requireContext())
+        updateSharedLibraryStatus()
     }
 
     private fun confirmSharedOverwrite(enableAutoSync: Boolean = false) {
@@ -387,11 +414,25 @@ class SettingsFragment : Fragment() {
         if (_binding == null) return
         val configured = GoogleDriveBackup.isSharedLibraryConfigured(requireContext())
         val preferences = requireContext().getSharedPreferences("map_assist", 0)
+        val isHost = configured && GoogleDriveBackup.isSharedLibraryHost(requireContext())
+        binding.sharedLibraryRoleBadge.visibility = if (configured) View.VISIBLE else View.GONE
+        if (configured) {
+            binding.sharedLibraryRoleText.text = if (isHost) "HOST · created on this device" else "GUEST · joined shared library"
+            binding.sharedLibraryRoleBadge.setCardBackgroundColor(
+                if (isHost) AccentPreferences.primaryContainer(requireContext()) else ContextCompat.getColor(requireContext(), R.color.outline_variant)
+            )
+            binding.sharedLibraryRoleText.setTextColor(
+                if (isHost) AccentPreferences.control(requireContext()) else ContextCompat.getColor(requireContext(), R.color.on_surface_variant)
+            )
+        }
         binding.sharedAutoSyncSwitch.setOnCheckedChangeListener(null)
         binding.sharedAutoSyncSwitch.isChecked = GoogleDriveBackup.isSharedAutoSyncEnabled(requireContext())
         binding.sharedAutoSyncSwitch.isEnabled = configured
         binding.sharedAutoSyncSwitch.setOnCheckedChangeListener { _, enabled ->
-            if (configured) GoogleDriveBackup.setSharedAutoSyncEnabled(requireContext(), enabled)
+            if (configured) {
+                GoogleDriveBackup.setSharedAutoSyncEnabled(requireContext(), enabled)
+                updateSharedLibraryStatus()
+            }
         }
         binding.sharedSyncButton.visibility = if (configured) View.VISIBLE else View.GONE
         binding.sharedSyncButton.text = "Sync shared library"
@@ -406,7 +447,7 @@ class SettingsFragment : Fragment() {
             missing -> "The shared CSV is missing from Google Drive. Create a replacement library, then share its new link with the other people."
             preferences.getString("shared_library_state", "") == "conflict" -> "Changes were made on more than one device. Sync needs your attention."
             GoogleDriveBackup.isSharedAutoSyncEnabled(requireContext()) -> "Automatic sync is on. Last synced ${formatLastSync(preferences.getLong("shared_library_last_sync", 0L))}."
-            else -> "Connected. Turn on automatic sync when you are ready."
+            else -> "Automatic sync is off. Use Sync shared library to send changes manually."
         }
         updateSharedSyncAttention()
         settleSwitchAnimations()
@@ -465,6 +506,8 @@ class SettingsFragment : Fragment() {
         outlined(binding.joinSharedLibraryButton)
         binding.openDownloadsButton.setTextColor(accent)
         binding.openDownloadsButton.iconTint = android.content.res.ColorStateList.valueOf(accent)
+        binding.openDriveButton.setTextColor(accent)
+        binding.openDriveButton.iconTint = android.content.res.ColorStateList.valueOf(accent)
         binding.googleDriveDisconnectButton.setTextColor(accent)
         binding.googleDriveDisconnectButton.iconTint = android.content.res.ColorStateList.valueOf(accent)
         binding.googleAccountHelpButton.setTextColor(accent)

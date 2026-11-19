@@ -56,6 +56,8 @@ class FirstFragment : Fragment() {
         adapter = TextFileListAdapter({ textFile ->
             val bundle = Bundle().apply {
                 putInt("textFileId", textFile.id)
+                putString("textFileMapNo", textFile.mapNo)
+                putString("textFileTitle", textFile.title)
             }
             findNavController().navigate(R.id.action_FirstFragment_to_SecondFragment, bundle)
         }, { stageUpdate(adapter, it) }, { stageDelete(adapter, it) }, { file -> shareMapAndDnc(file) })
@@ -172,7 +174,10 @@ class FirstFragment : Fragment() {
 
     private fun quickAdd() {
         val labels = currentFiles
-            .sortedWith { first, second -> MapNumber.compare(first.mapNo, second.mapNo) }
+            .sortedWith(
+                compareBy<TextFile> { if (MapGroupAccent.isBusinessMap(it.mapNo)) 1 else 0 }
+                    .thenComparator { first, second -> MapNumber.compare(first.mapNo, second.mapNo) }
+            )
             .map { "${it.mapNo} - ${it.title}" }
         val cardAdapter = ArrayAdapter(requireContext(), R.layout.material_dropdown_item, labels)
         val picker = android.widget.AutoCompleteTextView(requireContext()).apply {
@@ -216,7 +221,10 @@ class FirstFragment : Fragment() {
         adapter.setGroupMapNumbers(currentFiles.map { it.mapNo })
         val sorted = when {
             sortAlphabetically -> currentFiles.sortedBy { it.title.lowercase() }
-            sortNumerically -> currentFiles.sortedWith { first, second -> MapNumber.compare(first.mapNo, second.mapNo) }
+            sortNumerically -> currentFiles.sortedWith(
+                compareBy<TextFile> { if (MapGroupAccent.isBusinessMap(it.mapNo)) 1 else 0 }
+                    .thenComparator { first, second -> MapNumber.compare(first.mapNo, second.mapNo) }
+            )
             else -> currentFiles.sortedByDescending { it.lastModified }
         }
         adapter.submitList(sorted.filter { file ->
@@ -289,7 +297,7 @@ class FirstFragment : Fragment() {
                     override fun onQueryTextChange(query: String): Boolean { searchQuery = query; submitSorted(adapter); return true }
                 })
         }
-        toolbar.menu.add("Search").apply {
+        toolbar.menu.add(0, 1001, 2, "Search").apply {
                 setIcon(R.drawable.ic_search)
                 actionView = searchView
                 setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS or android.view.MenuItem.SHOW_AS_ACTION_COLLAPSE_ACTION_VIEW)
@@ -298,12 +306,19 @@ class FirstFragment : Fragment() {
                     override fun onMenuItemActionCollapse(item: android.view.MenuItem): Boolean { searchQuery = ""; submitSorted(adapter); toolbar.title = getString(R.string.app_name); return true }
                 })
         }
+        toolbar.menu.add(0, 1002, 1, "History").apply {
+            setIcon(R.drawable.ic_history)
+            setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS)
+        }
         toolbar.menu.add("Export all…").apply {
                 setIcon(R.drawable.ic_more)
                 setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
         }
         toolbar.setOnMenuItemClickListener {
-                if (it.title == "Export all…") {
+                if (it.title == "History") {
+                    SharedActivityDialog.show(requireContext())
+                    true
+                } else if (it.title == "Export all…") {
                     MaterialAlertDialogBuilder(requireContext())
                         .setTitle("Export all DNC cards?")
                         .setMessage("This will save a PNG image for every DNC card in Downloads/Map Assist. Existing exports with the same name will be replaced.")

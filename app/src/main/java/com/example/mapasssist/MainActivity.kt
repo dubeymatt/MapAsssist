@@ -6,6 +6,9 @@ import android.content.res.ColorStateList
 import android.content.SharedPreferences
 import android.graphics.Color
 import android.widget.Toast
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
@@ -22,9 +25,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var activeTabDestination = R.id.FirstFragment
     private var pendingTabDirection = 0
+    private var previousDestinationId: Int? = null
     private var syncPillAction: Runnable? = null
+    private var activityPillDismiss: Runnable? = null
     private val sharedSyncListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "shared_library_state" || key == "shared_library_file_id") updateSharedSyncPill()
+        if (key == "shared_activity_incoming") updateSharedActivityPill()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,6 +44,7 @@ class MainActivity : AppCompatActivity() {
         // Do not replay a past success merely because this activity was
         // recreated for a local appearance change.
         updateSharedSyncPill(showStoredSuccess = false)
+        updateSharedActivityPill()
         GoogleDriveBackup.disableLegacyWeeklyBackups(this)
         // Shared syncing is queued only by data edits. In particular, activity
         // recreation after changing colours or dark mode must stay local.
@@ -48,6 +55,11 @@ class MainActivity : AppCompatActivity() {
             if (GoogleDriveBackup.sharedSyncState(this) in setOf("pending", "failed", "conflict", "missing")) {
                 selectTab(navController, R.id.SettingsFragment)
             }
+        }
+        binding.sharedActivityPill.setOnClickListener {
+            SharedActivityStore.consumeIncoming(this)
+            hideSharedActivityPill()
+            SharedActivityDialog.show(this)
         }
         binding.addFab.setOnClickListener { navController.navigate(R.id.action_FirstFragment_to_SecondFragment) }
         binding.toolbar.setNavigationOnClickListener {
@@ -64,7 +76,7 @@ class MainActivity : AppCompatActivity() {
                 else -> false
             }
         }
-        navController.addOnDestinationChangedListener { _, destination, _ ->
+        navController.addOnDestinationChangedListener { _, destination, arguments ->
             val isDncPage = destination.id == R.id.FirstFragment
             // Maps owns a search action too. Do not clear it after that fragment has
             // populated the toolbar, otherwise the icon briefly appears then vanishes.
@@ -92,15 +104,44 @@ class MainActivity : AppCompatActivity() {
             binding.addFab.visibility = if (isDncPage) View.VISIBLE else View.GONE
             binding.bottomNavigation.visibility = if (isTabPage) View.VISIBLE else View.GONE
             binding.toolbar.navigationIcon = if (isTabPage) null else getDrawable(R.drawable.ic_back)
-            binding.toolbar.title = when (destination.id) {
+            val toolbarTitle = when (destination.id) {
                 R.id.FirstFragment -> getString(R.string.app_name)
                 R.id.SettingsFragment -> "Settings"
                 R.id.LedgerFragment -> getString(R.string.app_name)
                 R.id.ColoursFragment -> "Settings"
                 R.id.MapsFragment -> getString(R.string.app_name)
-                else -> getString(R.string.second_fragment_label)
+                R.id.SecondFragment -> {
+                    val mapNo = arguments?.getString("textFileMapNo").orEmpty()
+                    val title = arguments?.getString("textFileTitle").orEmpty()
+                    if (mapNo.isNotBlank() || title.isNotBlank()) "$mapNo - $title".trim(' ', '-') else "DNC card"
+                }
+                else -> getString(R.string.app_name)
             }
+            val openingDncCard = previousDestinationId == R.id.FirstFragment && destination.id == R.id.SecondFragment
+            val returningFromDncCard = previousDestinationId == R.id.SecondFragment && destination.id == R.id.FirstFragment
+            setToolbarTitle(toolbarTitle, openingDncCard || returningFromDncCard, if (openingDncCard) 1 else -1)
+            previousDestinationId = destination.id
         }
+    }
+
+    /** Brings the refreshed toolbar in once, in step with the DNC card transition. */
+    private fun setToolbarTitle(title: String, animate: Boolean, direction: Int) {
+        val toolbar = binding.toolbar
+        toolbar.animate().cancel()
+        toolbar.title = title
+        if (!animate) {
+            toolbar.alpha = 1f
+            toolbar.translationX = 0f
+            return
+        }
+        toolbar.alpha = 0f
+        toolbar.translationX = direction * 10f * resources.displayMetrics.density
+        toolbar.animate()
+            .alpha(1f)
+            .translationX(0f)
+            .setDuration(210)
+            .setInterpolator(FastOutSlowInInterpolator())
+            .start()
     }
     override fun onSupportNavigateUp(): Boolean {
         val navController = findNavController(R.id.nav_host_fragment_content_main)
@@ -109,8 +150,37 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         syncPillAction?.let { binding.sharedSyncPill.removeCallbacks(it) }
+        activityPillDismiss?.let { binding.sharedActivityPill.removeCallbacks(it) }
         getSharedPreferences("map_assist", MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(sharedSyncListener)
         super.onDestroy()
+    }
+
+    private fun updateSharedActivityPill() {
+        if (!SharedActivityStore.hasIncoming(this)) return
+        val entries = SharedActivityStore.consumeIncoming(this)
+        if (entries.isEmpty()) return
+        val latest = entries.maxByOrNull { it.time } ?: return
+        val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(latest.time))
+        binding.sharedActivityLabel.text = "${latest.person} · ${latest.summary} · $time"
+        binding.sharedActivityPill.apply {
+            visibility = View.VISIBLE
+            alpha = 0f
+            translationY = -dp(8).toFloat()
+            animate().alpha(1f).translationY(0f).setDuration(180L).setInterpolator(FastOutSlowInInterpolator()).start()
+        }
+        activityPillDismiss?.let { binding.sharedActivityPill.removeCallbacks(it) }
+        val dismiss = Runnable { hideSharedActivityPill() }
+        activityPillDismiss = dismiss
+        binding.sharedActivityPill.postDelayed(dismiss, 5_000L)
+    }
+
+    private fun hideSharedActivityPill() {
+        activityPillDismiss?.let { binding.sharedActivityPill.removeCallbacks(it) }
+        activityPillDismiss = null
+        if (binding.sharedActivityPill.visibility != View.VISIBLE) return
+        binding.sharedActivityPill.animate().alpha(0f).translationY(-dp(8).toFloat()).setDuration(160L)
+            .withEndAction { binding.sharedActivityPill.visibility = View.GONE; binding.sharedActivityPill.alpha = 1f; binding.sharedActivityPill.translationY = 0f }
+            .start()
     }
 
     /** Keeps background sync feedback visible without turning the toolbar into a progress screen. */

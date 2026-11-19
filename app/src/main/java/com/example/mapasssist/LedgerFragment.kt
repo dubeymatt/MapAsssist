@@ -83,7 +83,10 @@ class LedgerFragment : Fragment() {
             1 -> cards.sortedByDescending { activityTimes[it.mapNo] ?: Long.MIN_VALUE }
             2 -> cards.sortedWith(compareBy<TextFile> { if ((activityTimes[it.mapNo] ?: Long.MIN_VALUE) == Long.MIN_VALUE) 1 else 0 }
                 .thenBy { activityTimes[it.mapNo] ?: Long.MIN_VALUE })
-            else -> cards.sortedWith { first, second -> MapNumber.compare(first.mapNo, second.mapNo) }
+            else -> cards.sortedWith(
+                compareBy<TextFile> { if (MapGroupAccent.isBusinessMap(it.mapNo)) 1 else 0 }
+                    .thenComparator { first, second -> MapNumber.compare(first.mapNo, second.mapNo) }
+            )
         }
         adapter.submit(sorted.filter { card ->
             (searchQuery.isBlank() || "${card.mapNo} ${card.title}".contains(searchQuery, ignoreCase = true)) &&
@@ -189,7 +192,7 @@ class LedgerFragment : Fragment() {
                 override fun onQueryTextChange(query: String): Boolean { searchQuery = query; ledgerAdapter?.let(::render); return true }
             })
         }
-        toolbar.menu.add("Search").apply {
+        toolbar.menu.add(0, 1001, 2, "Search").apply {
             setIcon(R.drawable.ic_search)
             actionView = search
             setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS or android.view.MenuItem.SHOW_AS_ACTION_COLLAPSE_ACTION_VIEW)
@@ -198,12 +201,19 @@ class LedgerFragment : Fragment() {
                 override fun onMenuItemActionCollapse(item: android.view.MenuItem): Boolean { searchQuery = ""; ledgerAdapter?.let(::render); toolbar.title = getString(R.string.app_name); return true }
             })
         }
+        toolbar.menu.add(0, 1002, 1, "History").apply {
+            setIcon(R.drawable.ic_history)
+            setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS)
+        }
         toolbar.menu.add("Manage business territories").apply {
             setIcon(R.drawable.ic_more)
             setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_NEVER)
         }
         toolbar.setOnMenuItemClickListener { item ->
-            if (item.title == "Manage business territories") {
+            if (item.title == "History") {
+                SharedActivityDialog.show(requireContext())
+                true
+            } else if (item.title == "Manage business territories") {
                 showBusinessTerritoriesDialog()
                 true
             } else false
@@ -359,7 +369,7 @@ class LedgerFragment : Fragment() {
     }
 
     private fun showAssignmentDialog(card: TextFile) {
-        val person = EditText(requireContext()).apply { hint = "Assigned to" }
+        val person = assignmentNameField()
         val date = EditText(requireContext()).apply {
             hint = "Assigned on (DD/MM/YYYY)"
             setText(today())
@@ -404,6 +414,30 @@ class LedgerFragment : Fragment() {
             .setNegativeButton("Cancel", null).setPositiveButton("Complete") { _, _ ->
                 replaceRecord(active, active.copy(returnedOn = date.text.toString().trim(), notes = notes.text.toString().trim()))
             }.show()
+    }
+
+    /** Reuses people already recorded in the ledger so names stay consistent. */
+    private fun assignmentNameField(initialValue: String = "") = android.widget.AutoCompleteTextView(requireContext()).apply {
+        hint = "Assigned to"
+        val names = LedgerStore.read(requireContext())
+            .map { it.assignedTo.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.getDefault()) }
+            .sortedBy { it.lowercase(Locale.getDefault()) }
+        setAdapter(android.widget.ArrayAdapter(requireContext(), R.layout.material_dropdown_item, names))
+        setDropDownBackgroundDrawable(android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            cornerRadius = 16 * resources.displayMetrics.density
+            setColor(ContextCompat.getColor(requireContext(), R.color.surface_container))
+            setStroke((1 * resources.displayMetrics.density).toInt(), ContextCompat.getColor(requireContext(), R.color.outline_variant))
+        })
+        dropDownVerticalOffset = (6 * resources.displayMetrics.density).toInt()
+        threshold = 1
+        setText(initialValue)
+        setOnClickListener { if (names.isNotEmpty()) showDropDown() }
+        setOnFocusChangeListener { _, focused ->
+            if (focused && text.isNullOrBlank() && names.isNotEmpty()) showDropDown()
+        }
     }
 
     private fun showEditDialog(record: LedgerAssignment) {

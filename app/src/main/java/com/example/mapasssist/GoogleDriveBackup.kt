@@ -88,6 +88,10 @@ object GoogleDriveBackup {
     fun isSharedLibraryConfigured(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         .getString("shared_library_file_id", null) != null
 
+    /** The host created this shared CSV; a guest joined it from an owner link. */
+    fun isSharedLibraryHost(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        .getString("shared_library_role", "guest") == "host"
+
     fun isSharedAutoSyncEnabled(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         .getBoolean("shared_library_auto_sync", false)
 
@@ -115,6 +119,7 @@ object GoogleDriveBackup {
             .remove("shared_library_last_sync")
             .remove("shared_library_state")
             .remove("shared_library_auto_sync")
+            .remove("shared_library_role")
             .apply()
     }
 
@@ -137,14 +142,16 @@ object GoogleDriveBackup {
                 ?.takeIf { drive.fileExists(it) }
                 ?: drive.findFolder(FOLDER_NAME)
                 ?: drive.createFolder(FOLDER_NAME)
+            preferences.edit().putString("drive_folder_id", folderId).apply()
             val fileId = drive.uploadCsv(
                 null, folderId,
-                BackupCsv.create(AppDatabase.getDatabase(context).textFileDao().getAllForBackup(), LedgerStore.read(context)),
+                BackupCsv.create(AppDatabase.getDatabase(context).textFileDao().getAllForBackup(), LedgerStore.read(context), SharedActivityStore.read(context)),
                 SHARED_LIBRARY_NAME
             )
             preferences.edit()
                 .putString("shared_library_file_id", fileId)
                 .putBoolean("shared_library_auto_sync", true)
+                .putString("shared_library_role", "host")
                 .apply()
             markSharedSynced(context, drive.modifiedTime(fileId) ?: System.currentTimeMillis())
             WorkManager.getInstance(context).cancelUniqueWork(WEEKLY_WORK)
@@ -164,6 +171,7 @@ object GoogleDriveBackup {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString("shared_library_file_id", fileId)
             .putBoolean("shared_library_auto_sync", false)
+            .putString("shared_library_role", "guest")
             .putString("shared_library_state", "initial")
             .apply()
         RemoteBackup(fileId, modified)
@@ -180,6 +188,7 @@ object GoogleDriveBackup {
             check(restored.files.isNotEmpty() || restored.assignments.isNotEmpty()) { "Shared library contains no Map Assist data" }
             AppDatabase.getDatabase(context).textFileDao().replaceAll(restored.files)
             LedgerStore.replace(context, restored.assignments, notifySharedSync = false)
+            SharedActivityStore.replaceFromRemote(context, restored.activity)
             markSharedSynced(context, drive.modifiedTime(fileId) ?: System.currentTimeMillis())
             "Shared library downloaded"
         } catch (error: Throwable) {
@@ -196,7 +205,7 @@ object GoogleDriveBackup {
             val drive = authenticatedDrive(context)
             if (!drive.fileExists(fileId)) return@withContext markSharedMissing(context)
             val files = AppDatabase.getDatabase(context).textFileDao().getAllForBackup()
-            drive.uploadCsv(fileId, "", BackupCsv.create(files, LedgerStore.read(context)), SHARED_LIBRARY_NAME)
+            drive.uploadCsv(fileId, "", BackupCsv.create(files, LedgerStore.read(context), SharedActivityStore.read(context)), SHARED_LIBRARY_NAME)
             markSharedSynced(context, drive.modifiedTime(fileId) ?: System.currentTimeMillis())
             "Shared library updated"
         } catch (error: Throwable) {
@@ -338,7 +347,7 @@ object GoogleDriveBackup {
             ?.takeIf { drive.fileExists(it) }
             ?: drive.findFile(BACKUP_NAME, folderId)
         val files = AppDatabase.getDatabase(context).textFileDao().getAllForBackup()
-        val updated = drive.uploadCsv(fileId, folderId, BackupCsv.create(files, LedgerStore.read(context)))
+        val updated = drive.uploadCsv(fileId, folderId, BackupCsv.create(files, LedgerStore.read(context), SharedActivityStore.read(context)))
         preferences.edit()
             .putString("drive_backup_file_id", updated)
             .putLong("drive_last_backup", System.currentTimeMillis())

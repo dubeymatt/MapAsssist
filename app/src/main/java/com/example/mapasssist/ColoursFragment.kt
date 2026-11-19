@@ -47,7 +47,7 @@ class ColoursFragment : Fragment() {
             addGroupButton("$prefix group", prefix, index)
         }
         if (mapNumbers.any(MapGroupAccent::isBusinessMap)) {
-            addGroupButton("Business Suffix Group", MapGroupAccent.BUSINESS_GROUP, 0)
+            addGroupButton("Business Group", MapGroupAccent.BUSINESS_GROUP, 0)
         }
     }
 
@@ -90,7 +90,7 @@ class ColoursFragment : Fragment() {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(when (prefix) {
                 "" -> "No letter group colour"
-                MapGroupAccent.BUSINESS_GROUP -> "Business Suffix Group colour"
+                MapGroupAccent.BUSINESS_GROUP -> "Business Group colour"
                 else -> "$prefix group colour"
             })
             .setSingleChoiceItems(labels, if (saved in AccentPreferences.choices.indices) saved + 1 else 0) { dialog, which ->

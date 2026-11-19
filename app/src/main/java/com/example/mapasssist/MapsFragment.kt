@@ -197,7 +197,7 @@ class MapsFragment : Fragment() {
                     override fun onQueryTextChange(query: String): Boolean { searchQuery = query; submitSlots(); return true }
                 })
         }
-        toolbar.menu.add("Search").apply {
+        toolbar.menu.add(0, 1001, 2, "Search").apply {
                 setIcon(R.drawable.ic_search)
                 actionView = searchView
                 setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS or android.view.MenuItem.SHOW_AS_ACTION_COLLAPSE_ACTION_VIEW)
@@ -205,6 +205,16 @@ class MapsFragment : Fragment() {
                     override fun onMenuItemActionExpand(item: android.view.MenuItem): Boolean { toolbar.title = ""; return true }
                     override fun onMenuItemActionCollapse(item: android.view.MenuItem): Boolean { searchQuery = ""; submitSlots(); toolbar.title = getString(R.string.app_name); return true }
                 })
+        }
+        toolbar.menu.add(0, 1002, 1, "History").apply {
+            setIcon(R.drawable.ic_history)
+            setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS)
+        }
+        toolbar.setOnMenuItemClickListener { item ->
+            if (item.title == "History") {
+                SharedActivityDialog.show(requireContext())
+                true
+            } else false
         }
     }
 

@@ -5,9 +5,13 @@ import com.example.mapasssist.data.DncEntryCodec
 import com.example.mapasssist.data.TextFile
 
 object BackupCsv {
-    data class BackupData(val files: List<TextFile>, val assignments: List<LedgerAssignment>)
+    data class BackupData(
+        val files: List<TextFile>,
+        val assignments: List<LedgerAssignment>,
+        val activity: List<SharedActivity> = emptyList()
+    )
 
-    fun create(files: List<TextFile>, assignments: List<LedgerAssignment> = emptyList()): String = buildString {
+    fun create(files: List<TextFile>, assignments: List<LedgerAssignment> = emptyList(), activity: List<SharedActivity> = emptyList()): String = buildString {
         appendLine("DNC Card,Date (MM/YY),Address,Supporting information")
         files.sortedWith(Comparator { first, second ->
             MapNumber.compare(first.mapNo, second.mapNo)
@@ -49,6 +53,13 @@ object BackupCsv {
                 previousCard = card
             }
         }
+        if (activity.isNotEmpty()) {
+            appendLine()
+            appendLine("Shared activity,Who,When")
+            activity.sortedByDescending { it.time }.take(120).forEach { item ->
+                appendLine(listOf(item.summary, item.person, item.time.toString()).joinToString(",") { csv(it) })
+            }
+        }
     }
 
     /** Parses the same portable CSV format used for local and Drive backups. */
@@ -57,9 +68,11 @@ object BackupCsv {
     fun parseBundle(text: String): BackupData {
         val grouped = linkedMapOf<Pair<String, String>, MutableList<DncEntry>>()
         val assignments = mutableListOf<LedgerAssignment>()
+        val activity = mutableListOf<SharedActivity>()
         var active: Pair<String, String>? = null
         var activeLedger: Pair<String, String>? = null
         var readingLedger = false
+        var readingActivity = false
         var ledgerUsesCombinedCards = false
         parseRecords(text).drop(1).forEach { columns ->
             if (columns.isNotEmpty() && columns.any { it.isNotBlank() }) {
@@ -69,6 +82,20 @@ object BackupCsv {
                     ledgerUsesCombinedCards = columns.firstOrNull()?.trim()?.equals("Ledger DNC Card", ignoreCase = true) == true
                     active = null
                     activeLedger = null
+                    return@forEach
+                }
+                if (columns.firstOrNull()?.trim()?.equals("Shared activity", ignoreCase = true) == true) {
+                    readingActivity = true
+                    readingLedger = false
+                    active = null
+                    activeLedger = null
+                    return@forEach
+                }
+                if (readingActivity) {
+                    val summary = columns.getOrElse(0) { "" }.trim()
+                    val person = columns.getOrElse(1) { "" }.trim()
+                    val time = columns.getOrElse(2) { "" }.trim().toLongOrNull() ?: 0L
+                    if (summary.isNotBlank() && time > 0L) activity += SharedActivity(time, person.ifBlank { "Unknown" }, summary)
                     return@forEach
                 }
                 if (readingLedger) {
@@ -111,7 +138,7 @@ object BackupCsv {
         }
         return BackupData(grouped.map { (key, rows) ->
             TextFile(title = key.first, mapNo = key.second, entriesJson = DncEntryCodec.encode(rows))
-        }, assignments)
+        }, assignments, activity)
     }
 
     private fun csv(value: String) = "\"${value.replace("\"", "\"\"")}\""
