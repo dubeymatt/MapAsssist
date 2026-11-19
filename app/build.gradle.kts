@@ -13,8 +13,8 @@ android {
         targetSdk = 35
         // Keep this value in step with each distributed build; the Settings
         // screen reads it directly from BuildConfig.
-        versionCode = 97
-        versionName = "0.9.7"
+        versionCode = 98
+        versionName = "0.9.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -76,6 +76,7 @@ class SettingsFragment : Fragment() {
             }
         }
         binding.openDriveButton.setOnClickListener { openDriveFolder() }
+        binding.checkUpdatesButton.setOnClickListener { checkForUpdates() }
         binding.googleAccountButton.setOnClickListener {
             if (!GoogleDriveBackup.hasConnectedAccount(requireContext())) googleDriveSignIn.launch(GoogleDriveBackup.signInIntent(requireContext()))
         }
@@ -108,6 +109,65 @@ class SettingsFragment : Fragment() {
         updateSharedLibraryStatus()
         binding.settingsVersion.text = "Version ${BuildConfig.VERSION_NAME}"
         settleSwitchAnimations()
+    }
+
+    private fun checkForUpdates() {
+        binding.checkUpdatesButton.isEnabled = false
+        binding.checkUpdatesButton.text = "Checking…"
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { GitHubUpdateManager.checkForUpdate() }
+                .onSuccess { release ->
+                    if (release == null) {
+                        Toast.makeText(requireContext(), "Map Assist is up to date", Toast.LENGTH_SHORT).show()
+                    } else {
+                        showUpdateAvailable(release)
+                    }
+                }
+                .onFailure { error ->
+                    Toast.makeText(requireContext(), "Could not check for updates: ${error.message ?: "try again"}", Toast.LENGTH_LONG).show()
+                }
+            if (_binding != null) {
+                binding.checkUpdatesButton.isEnabled = true
+                binding.checkUpdatesButton.text = "Check for updates"
+            }
+        }
+    }
+
+    private fun showUpdateAvailable(release: GitHubUpdateManager.Release) {
+        val notes = release.notes.take(1_800).ifBlank { "No release notes were supplied." }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Map Assist ${release.version} is available")
+            .setMessage("$notes\n\nAndroid will ask for confirmation before installing the update.")
+            .setNegativeButton("Not now", null)
+            .setPositiveButton("Download update") { _, _ -> downloadUpdate(release) }
+            .show()
+    }
+
+    private fun downloadUpdate(release: GitHubUpdateManager.Release) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+            !requireContext().packageManager.canRequestPackageInstalls()
+        ) {
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Allow updates from Map Assist")
+                .setMessage("Android needs permission for Map Assist to open its update installer. After allowing it, tap Check for updates again.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Open settings") { _, _ ->
+                    startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:${requireContext().packageName}")))
+                }
+                .show()
+            return
+        }
+        binding.checkUpdatesButton.isEnabled = false
+        binding.checkUpdatesButton.text = "Downloading…"
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { GitHubUpdateManager.download(requireContext(), release) }
+                .onSuccess { apk -> GitHubUpdateManager.install(requireContext(), apk) }
+                .onFailure { error -> Toast.makeText(requireContext(), "Could not download update: ${error.message ?: "try again"}", Toast.LENGTH_LONG).show() }
+            if (_binding != null) {
+                binding.checkUpdatesButton.isEnabled = true
+                binding.checkUpdatesButton.text = "Check for updates"
+            }
+        }
     }
     private fun confirmDriveSync() {
         MaterialAlertDialogBuilder(requireContext())
