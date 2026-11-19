@@ -2,6 +2,8 @@ package com.example.mapasssist
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -39,6 +41,7 @@ object GoogleDriveBackup {
     private const val WEEKLY_WORK = "weekly_google_drive_backup"
     private const val LAUNCH_CHECK_WORK = "google_drive_launch_check"
     private const val SHARED_SYNC_WORK = "shared_google_drive_sync"
+    private const val SHARED_DOCUMENT_URI = "shared_library_document_uri"
     private val driveScope = Scope(DRIVE_SCOPE)
 
     data class RemoteBackup(val id: String, val modifiedTime: Long)
@@ -85,8 +88,9 @@ object GoogleDriveBackup {
             .apply()
     }
 
-    fun isSharedLibraryConfigured(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        .getString("shared_library_file_id", null) != null
+    fun isSharedLibraryConfigured(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).let {
+        it.getString("shared_library_file_id", null) != null || it.getString(SHARED_DOCUMENT_URI, null) != null
+    }
 
     /** The host created this shared CSV; a guest joined it from an owner link. */
     fun isSharedLibraryHost(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -116,6 +120,7 @@ object GoogleDriveBackup {
         WorkManager.getInstance(context).cancelUniqueWork(SHARED_SYNC_WORK)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .remove("shared_library_file_id")
+            .remove(SHARED_DOCUMENT_URI)
             .remove("shared_library_last_sync")
             .remove("shared_library_state")
             .remove("shared_library_auto_sync")
@@ -125,7 +130,8 @@ object GoogleDriveBackup {
 
     /** Queues an upload/download after a local save. Local storage always remains the first save target. */
     fun queueAutomaticSharedSync(context: Context) {
-        if (!hasConnectedAccount(context) || !isSharedLibraryConfigured(context) || !isSharedAutoSyncEnabled(context)) return
+        if (!isSharedLibraryConfigured(context) || !isSharedAutoSyncEnabled(context)) return
+        if (sharedDocumentUri(context) == null && !hasConnectedAccount(context)) return
         setSharedSyncState(context, "pending")
         val request = OneTimeWorkRequestBuilder<SharedLibrarySyncWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
@@ -177,9 +183,36 @@ object GoogleDriveBackup {
         RemoteBackup(fileId, modified)
     }
 
+    /** Connects a guest through Android's file picker, keeping Drive access limited to this one CSV. */
+    suspend fun connectSharedLibraryDocument(context: Context, uri: Uri): RemoteBackup = withContext(Dispatchers.IO) {
+        check(isGoogleDriveDocument(uri)) { "Choose the shared CSV from Google Drive" }
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        }.recoverCatching {
+            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }.getOrThrow()
+        val csv = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            ?: error("Could not read the selected file")
+        val data = BackupCsv.parseBundle(csv)
+        check(data.files.isNotEmpty() || data.assignments.isNotEmpty()) { "The selected file contains no Map Assist data" }
+        val modified = sharedDocumentModified(context, uri) ?: System.currentTimeMillis()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .remove("shared_library_file_id")
+            .putString(SHARED_DOCUMENT_URI, uri.toString())
+            .putBoolean("shared_library_auto_sync", false)
+            .putString("shared_library_role", "guest")
+            .putString("shared_library_state", "initial")
+            .apply()
+        RemoteBackup("", modified)
+    }
+
     suspend fun restoreSharedLibrary(context: Context, remote: RemoteBackup? = null): String = withContext(Dispatchers.IO) {
         setSharedSyncState(context, "syncing")
         try {
+            sharedDocumentUri(context)?.let { return@withContext restoreSharedDocument(context, it) }
             val drive = authenticatedDrive(context)
             val fileId = remote?.id ?: requireNotNull(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getString("shared_library_file_id", null)) { "No shared library connected" }
@@ -200,6 +233,7 @@ object GoogleDriveBackup {
     suspend fun uploadSharedLibrary(context: Context): String = withContext(Dispatchers.IO) {
         setSharedSyncState(context, "syncing")
         try {
+            sharedDocumentUri(context)?.let { return@withContext uploadSharedDocument(context, it) }
             val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val fileId = requireNotNull(preferences.getString("shared_library_file_id", null)) { "No shared library connected" }
             val drive = authenticatedDrive(context)
@@ -218,6 +252,7 @@ object GoogleDriveBackup {
     suspend fun syncSharedLibrary(context: Context): String = withContext(Dispatchers.IO) {
         setSharedSyncState(context, "syncing")
         try {
+            sharedDocumentUri(context)?.let { return@withContext syncSharedDocument(context, it) }
             val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val fileId = requireNotNull(preferences.getString("shared_library_file_id", null)) { "No shared library connected" }
             val lastSync = preferences.getLong("shared_library_last_sync", 0L)
@@ -254,6 +289,82 @@ object GoogleDriveBackup {
             .putLong("shared_library_last_sync", timestamp)
             .putString("shared_library_state", "synced")
             .apply()
+    }
+
+    private fun sharedDocumentUri(context: Context): Uri? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        .getString(SHARED_DOCUMENT_URI, null)?.let(Uri::parse)
+
+    private fun isGoogleDriveDocument(uri: Uri): Boolean = uri.authority?.contains("docs.storage") == true
+
+    private fun sharedDocumentModified(context: Context, uri: Uri): Long? = runCatching {
+        context.contentResolver.query(uri, arrayOf(DocumentsContract.Document.COLUMN_LAST_MODIFIED), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getLong(0).takeIf { it > 0L } else null
+        }
+    }.getOrNull()
+
+    private fun sharedCsv(context: Context): String = context.contentResolver.openInputStream(requireNotNull(sharedDocumentUri(context)))
+        ?.bufferedReader()?.use { it.readText() } ?: error("Could not read the shared library")
+
+    private suspend fun replaceSharedData(context: Context, csv: String) {
+        val restored = BackupCsv.parseBundle(csv)
+        check(restored.files.isNotEmpty() || restored.assignments.isNotEmpty()) { "Shared library contains no Map Assist data" }
+        AppDatabase.getDatabase(context).textFileDao().replaceAll(restored.files)
+        LedgerStore.replace(context, restored.assignments, notifySharedSync = false)
+        SharedActivityStore.replaceFromRemote(context, restored.activity)
+    }
+
+    private suspend fun restoreSharedDocument(context: Context, uri: Uri): String {
+        try {
+            replaceSharedData(context, sharedCsv(context))
+            markSharedSynced(context, sharedDocumentModified(context, uri) ?: System.currentTimeMillis())
+            return "Shared library downloaded"
+        } catch (error: Throwable) {
+            markSharedSyncFailed(context)
+            throw error
+        }
+    }
+
+    private suspend fun uploadSharedDocument(context: Context, uri: Uri): String {
+        try {
+            val csv = BackupCsv.create(AppDatabase.getDatabase(context).textFileDao().getAllForBackup(), LedgerStore.read(context), SharedActivityStore.read(context))
+            context.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use { it.write(csv) }
+                ?: error("Could not write to the shared library")
+            markSharedSynced(context, sharedDocumentModified(context, uri) ?: System.currentTimeMillis())
+            return "Shared library updated"
+        } catch (error: Throwable) {
+            markSharedSyncFailed(context)
+            throw error
+        }
+    }
+
+    private suspend fun syncSharedDocument(context: Context, uri: Uri): String {
+        val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val lastSync = preferences.getLong("shared_library_last_sync", 0L)
+        if (lastSync == 0L) {
+            setSharedSyncState(context, "initial")
+            return "Shared library needs an initial download or upload"
+        }
+        return try {
+            val remoteModified = sharedDocumentModified(context, uri) ?: System.currentTimeMillis()
+            val localModified = maxOf(AppDatabase.getDatabase(context).textFileDao().latestModified() ?: 0L, LedgerStore.lastModified(context))
+            val remoteChanged = remoteModified > lastSync
+            val localChanged = localModified > lastSync
+            when {
+                remoteChanged && localChanged -> {
+                    setSharedSyncState(context, "conflict")
+                    "Shared library needs attention"
+                }
+                remoteChanged -> restoreSharedDocument(context, uri)
+                localChanged -> uploadSharedDocument(context, uri)
+                else -> {
+                    markSharedSynced(context, lastSync)
+                    "Shared library is up to date"
+                }
+            }
+        } catch (error: Throwable) {
+            markSharedSyncFailed(context)
+            throw error
+        }
     }
 
     /** Never recreate a shared file automatically: only its owner may explicitly create a replacement. */

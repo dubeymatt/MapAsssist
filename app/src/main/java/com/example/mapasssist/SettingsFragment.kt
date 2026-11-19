@@ -53,6 +53,14 @@ class SettingsFragment : Fragment() {
         MaterialAlertDialogBuilder(requireContext()).setTitle("Import will permanently replace all data").setMessage("This will delete all ${files.size} saved DNC cards and replace them with ${imported.files.size} cards from the spreadsheet. This cannot be undone.")
             .setNegativeButton("Cancel", null).setPositiveButton("Replace all data") { _, _ -> viewModel.replaceAll(imported.files); LedgerStore.replace(requireContext(), imported.assignments); Toast.makeText(requireContext(), "DNCs and ledger replaced", Toast.LENGTH_SHORT).show() }.show()
     }
+    private val sharedLibraryFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@registerForActivityResult
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { GoogleDriveBackup.connectSharedLibraryDocument(requireContext(), uri) }
+                .onSuccess(::showSharedLibraryChoice)
+                .onFailure { error -> Toast.makeText(requireContext(), "Could not join shared library: ${error.message ?: "choose the shared CSV from Google Drive"}", Toast.LENGTH_LONG).show() }
+        }
+    }
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View { _binding = FragmentSettingsBinding.inflate(inflater, container, false); return binding.root }
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         val preferences = requireContext().getSharedPreferences("map_assist", 0)
@@ -89,7 +97,7 @@ class SettingsFragment : Fragment() {
         }
         binding.googleDriveDisconnectButton.setOnClickListener { confirmDisconnect() }
         binding.createSharedLibraryButton.setOnClickListener { createSharedLibrary() }
-        binding.joinSharedLibraryButton.setOnClickListener { showJoinSharedLibraryDialog() }
+        binding.joinSharedLibraryButton.setOnClickListener { chooseSharedLibraryFile() }
         binding.sharedAutoSyncSwitch.setOnCheckedChangeListener { _, enabled ->
             if (GoogleDriveBackup.isSharedLibraryConfigured(requireContext())) {
                 GoogleDriveBackup.setSharedAutoSyncEnabled(requireContext(), enabled)
@@ -361,22 +369,16 @@ class SettingsFragment : Fragment() {
     }
 
     private fun showJoinSharedLibraryDialog() {
-        if (!GoogleDriveBackup.hasConnectedAccount(requireContext())) {
-            Toast.makeText(requireContext(), "Sign in to a Google account at the top of Settings first", Toast.LENGTH_LONG).show()
-            return
-        }
-        val link = android.widget.EditText(requireContext()).apply { hint = "Google Drive sharing link" }
+        chooseSharedLibraryFile()
+    }
+
+    private fun chooseSharedLibraryFile() {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Join shared library")
-            .setMessage("Ask the library owner to share the file with your Google account as an Editor, then paste its sharing link here.")
-            .setView(link)
+            .setTitle("Choose shared library")
+            .setMessage("Choose the DO NOT DELETE MAP ASSIST SHARE.csv file from Google Drive. The owner must first share it with you as an Editor.")
             .setNegativeButton("Cancel", null)
-            .setPositiveButton("Connect") { _, _ ->
-                viewLifecycleOwner.lifecycleScope.launch {
-                    runCatching { GoogleDriveBackup.connectSharedLibrary(requireContext(), link.text.toString()) }
-                        .onSuccess(::showSharedLibraryChoice)
-                        .onFailure { Toast.makeText(requireContext(), "Could not open shared library: ${it.message ?: "check the link and sharing permission"}", Toast.LENGTH_LONG).show() }
-                }
+            .setPositiveButton("Choose file") { _, _ ->
+                sharedLibraryFile.launch(arrayOf("text/csv", "text/comma-separated-values", "application/vnd.ms-excel"))
             }
             .show()
     }
@@ -502,7 +504,7 @@ class SettingsFragment : Fragment() {
         binding.createSharedLibraryButton.text = if (missing) "Replace shared library" else "Create shared library"
         binding.joinSharedLibraryButton.visibility = if (!configured || missing) View.VISIBLE else View.GONE
         binding.sharedLibraryStatus.text = when {
-            !GoogleDriveBackup.hasConnectedAccount(requireContext()) -> "Sign in to a Google account above to create or join a shared library."
+            !configured && !GoogleDriveBackup.hasConnectedAccount(requireContext()) -> "Sign in to a Google account above to create a library, or choose a shared file from Google Drive to join one."
             !configured -> "Create a shared library, or join one that its owner has shared with your Google account."
             missing -> "The shared CSV is missing from Google Drive. Create a replacement library, then share its new link with the other people."
             preferences.getString("shared_library_state", "") == "conflict" -> "Changes were made on more than one device. Sync needs your attention."
