@@ -105,6 +105,9 @@ class SettingsFragment : Fragment() {
             }
         }
         binding.sharedSyncButton.setOnClickListener { syncSharedLibrary() }
+        binding.sharedInviteButton.setOnClickListener { showInviteDialog() }
+        binding.sharedMembersButton.setOnClickListener { showSharedMembers() }
+        binding.sharedTransferHelpButton.setOnClickListener { showHostTransferHelp() }
         binding.disconnectSharedLibraryButton.setOnClickListener { confirmLeaveSharedLibrary() }
         viewModel.allTextFiles.observe(viewLifecycleOwner) { files = it; binding.exportButton.isEnabled = it.isNotEmpty() }
         binding.exportButton.setOnClickListener {
@@ -353,14 +356,8 @@ class SettingsFragment : Fragment() {
                     updateSharedLibraryStatus()
                     MaterialAlertDialogBuilder(requireContext())
                         .setTitle("Shared library created")
-                        .setMessage("Share this file with the other people as Editors in Google Drive, then send them this link:\n\n$link\n\nThis is the synchronised CSV. Do not use Google Drive's ‘Save as Google Sheets’ option as that creates a separate copy which Map Assist cannot sync.")
-                        .setNegativeButton("Close", null)
-                        .setPositiveButton("Share link") { _, _ ->
-                            startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(android.content.Intent.EXTRA_TEXT, link)
-                            }, "Share shared library link"))
-                        }
+                        .setMessage("Your shared library is ready. Use Share below to invite people by email or send the joining instructions.")
+                        .setPositiveButton("Done", null)
                         .show()
                 }
                 .onFailure { Toast.makeText(requireContext(), "Could not create shared library: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() }
@@ -380,6 +377,69 @@ class SettingsFragment : Fragment() {
             .setPositiveButton("Choose file") { _, _ ->
                 sharedLibraryFile.launch(arrayOf("text/csv", "text/comma-separated-values", "application/vnd.ms-excel"))
             }
+            .show()
+    }
+
+    private fun showInviteDialog() {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Share shared library")
+            .setItems(arrayOf("Invite by email", "Share link and instructions")) { _, choice ->
+                if (choice == 0) showEmailInviteDialog() else shareJoinInstructions()
+            }
+            .show()
+    }
+
+    private fun showEmailInviteDialog() {
+        val email = android.widget.EditText(requireContext()).apply {
+            hint = "Email address"
+            inputType = android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Invite by email")
+            .setMessage("Map Assist will share the protected CSV as an Editor and send joining instructions.")
+            .setView(email)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Invite") { _, _ ->
+                viewLifecycleOwner.lifecycleScope.launch {
+                    runCatching { GoogleDriveBackup.inviteToSharedLibrary(requireContext(), email.text.toString()) }
+                        .onSuccess { message ->
+                            Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+                        }
+                        .onFailure { error -> Toast.makeText(requireContext(), "Could not invite member: ${error.message ?: "try again"}", Toast.LENGTH_LONG).show() }
+                }
+            }
+            .show()
+    }
+
+    private fun shareJoinInstructions() {
+        val link = GoogleDriveBackup.sharedLibraryLink(requireContext()).orEmpty()
+        val message = "Join my Map Assist shared library.\n\n1. Ask the host to share the file with you as an Editor.\n2. In Map Assist, open Settings → Shared library → Join.\n3. Choose DO NOT DELETE MAP ASSIST SHARE.csv from Google Drive.\n\nGoogle Drive link: $link"
+        startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(android.content.Intent.EXTRA_TEXT, message)
+        }, "Share Map Assist library"))
+    }
+
+    private fun showSharedMembers() {
+        binding.sharedMembersButton.isEnabled = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { GoogleDriveBackup.sharedLibraryMembers(requireContext()) }
+                .onSuccess { members ->
+                    val text = if (members.isEmpty()) "No individual members are listed. The library may be shared through a link or group." else members.joinToString("\n\n") { member ->
+                        "${member.name}\n${member.email.ifBlank { "Link or group access" }} · ${member.role}"
+                    }
+                    MaterialAlertDialogBuilder(requireContext()).setTitle("Library members").setMessage(text).setPositiveButton("Close", null).show()
+                }
+                .onFailure { error -> Toast.makeText(requireContext(), "Could not load members: ${error.message ?: "try again"}", Toast.LENGTH_LONG).show() }
+            if (_binding != null) binding.sharedMembersButton.isEnabled = true
+        }
+    }
+
+    private fun showHostTransferHelp() {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Host transfer and recovery")
+            .setMessage("The host is the device that created this library. To hand it over, use Google Drive's Share or Manage access screen to make the new person an Editor or transfer ownership where Google allows it.\n\nThe new person should then join by choosing the same protected CSV in Map Assist. Keep at least one local spreadsheet backup before changing ownership or replacing a missing library.")
+            .setPositiveButton("OK", null)
             .show()
     }
 
@@ -407,6 +467,10 @@ class SettingsFragment : Fragment() {
     }
 
     private fun confirmSharedOverwrite(enableAutoSync: Boolean = false) {
+        if (!GoogleDriveBackup.isSharedLibraryHost(requireContext())) {
+            Toast.makeText(requireContext(), "Only the host can replace the shared library", Toast.LENGTH_LONG).show()
+            return
+        }
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Replace shared library?")
             .setMessage("This will replace the shared library for every person using it. Export a local backup first if you are unsure.")
@@ -454,13 +518,15 @@ class SettingsFragment : Fragment() {
     }
 
     private fun showSharedConflict() {
-        MaterialAlertDialogBuilder(requireContext())
+        val dialog = MaterialAlertDialogBuilder(requireContext())
             .setTitle("Shared library needs attention")
             .setMessage("Both this device and the shared library changed since the last sync. Choose one version to keep. Export a local backup first if you are unsure.")
             .setNegativeButton("Cancel", null)
-            .setNeutralButton("Replace shared library") { _, _ -> confirmSharedOverwrite() }
             .setPositiveButton("Download shared library") { _, _ -> downloadSharedLibrary() }
-            .show()
+        if (GoogleDriveBackup.isSharedLibraryHost(requireContext())) {
+            dialog.setNeutralButton("Replace shared library") { _, _ -> confirmSharedOverwrite() }
+        }
+        dialog.show()
     }
 
     private fun confirmLeaveSharedLibrary() {
@@ -478,7 +544,9 @@ class SettingsFragment : Fragment() {
         val preferences = requireContext().getSharedPreferences("map_assist", 0)
         val isHost = configured && GoogleDriveBackup.isSharedLibraryHost(requireContext())
         binding.sharedLibraryRoleBadge.visibility = if (configured) View.VISIBLE else View.GONE
+        binding.sharedLibraryDetails.visibility = if (configured) View.VISIBLE else View.GONE
         if (configured) {
+        binding.sharedLibraryDetails.text = if (isHost) "You manage invitations and recovery for this library." else "The host manages invitations and recovery for this library."
             binding.sharedLibraryRoleText.text = if (isHost) "HOST · created on this device" else "GUEST · joined shared library"
             binding.sharedLibraryRoleBadge.setCardBackgroundColor(
                 if (isHost) AccentPreferences.primaryContainer(requireContext()) else ContextCompat.getColor(requireContext(), R.color.outline_variant)
@@ -499,14 +567,18 @@ class SettingsFragment : Fragment() {
         binding.sharedSyncButton.visibility = if (configured) View.VISIBLE else View.GONE
         binding.sharedSyncButton.text = "Sync shared library"
         binding.disconnectSharedLibraryButton.visibility = if (configured) View.VISIBLE else View.GONE
+        binding.sharedHostActions.visibility = if (configured && isHost) View.VISIBLE else View.GONE
+        binding.sharedTransferHelpButton.visibility = if (configured && isHost) View.VISIBLE else View.GONE
         val missing = preferences.getString("shared_library_state", "") == "missing"
-        binding.createSharedLibraryButton.visibility = if (!configured || missing) View.VISIBLE else View.GONE
+        val canReplaceMissing = missing && isHost
+        binding.createSharedLibraryButton.visibility = if (!configured || canReplaceMissing) View.VISIBLE else View.GONE
         binding.createSharedLibraryButton.text = if (missing) "Replace shared library" else "Create shared library"
         binding.joinSharedLibraryButton.visibility = if (!configured || missing) View.VISIBLE else View.GONE
         binding.sharedLibraryStatus.text = when {
             !configured && !GoogleDriveBackup.hasConnectedAccount(requireContext()) -> "Sign in to a Google account above to create a library, or choose a shared file from Google Drive to join one."
             !configured -> "Create a shared library, or join one that its owner has shared with your Google account."
-            missing -> "The shared CSV is missing from Google Drive. Create a replacement library, then share its new link with the other people."
+            missing && isHost -> "The shared CSV is missing from Google Drive. Create a replacement library, then share its new link with the other people."
+            missing -> "The shared CSV is no longer available. Ask the host to create a replacement, then choose that file to rejoin."
             preferences.getString("shared_library_state", "") == "conflict" -> "Changes were made on more than one device. Sync needs your attention."
             GoogleDriveBackup.isSharedAutoSyncEnabled(requireContext()) -> "Automatic sync is on. Last synced ${formatLastSync(preferences.getLong("shared_library_last_sync", 0L))}."
             else -> "Automatic sync is off. Use Sync shared library to send changes manually."
@@ -566,6 +638,8 @@ class SettingsFragment : Fragment() {
         outlined(binding.importButton)
         outlined(binding.coloursButton)
         outlined(binding.joinSharedLibraryButton)
+        outlined(binding.sharedInviteButton)
+        outlined(binding.sharedMembersButton)
         binding.openDownloadsButton.setTextColor(accent)
         binding.openDownloadsButton.iconTint = android.content.res.ColorStateList.valueOf(accent)
         binding.openDriveButton.setTextColor(accent)
@@ -576,6 +650,8 @@ class SettingsFragment : Fragment() {
         binding.googleAccountHelpButton.iconTint = android.content.res.ColorStateList.valueOf(accent)
         binding.disconnectSharedLibraryButton.setTextColor(accent)
         binding.disconnectSharedLibraryButton.iconTint = android.content.res.ColorStateList.valueOf(accent)
+        binding.sharedTransferHelpButton.setTextColor(accent)
+        binding.sharedTransferHelpButton.iconTint = android.content.res.ColorStateList.valueOf(accent)
         val states = arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf())
         binding.darkModeSwitch.thumbTintList = android.content.res.ColorStateList(states, intArrayOf(accent, ContextCompat.getColor(requireContext(), R.color.on_surface_variant)))
         binding.darkModeSwitch.trackTintList = android.content.res.ColorStateList(states, intArrayOf(AccentPreferences.primaryContainer(requireContext()), ContextCompat.getColor(requireContext(), R.color.outline_variant)))

@@ -35,12 +35,18 @@
           <TextView android:id="@+id/shared_library_role_text" android:layout_width="wrap_content" android:layout_height="wrap_content" android:paddingStart="10dp" android:paddingTop="5dp" android:paddingEnd="10dp" android:paddingBottom="5dp" android:textAppearance="@style/TextAppearance.MapAssist.FileMeta" android:textStyle="bold"/>
         </com.google.android.material.card.MaterialCardView>
         <TextView android:id="@+id/shared_library_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:textAppearance="@style/TextAppearance.MapAssist.Body"/>
+        <TextView android:id="@+id/shared_library_details" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:visibility="gone" android:textAppearance="@style/TextAppearance.MapAssist.FileMeta"/>
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:orientation="vertical">
           <com.google.android.material.button.MaterialButton android:id="@+id/create_shared_library_button" android:layout_width="match_parent" android:layout_height="44dp" android:text="Create" app:icon="@drawable/ic_cloud_backup"/>
           <com.google.android.material.button.MaterialButton android:id="@+id/join_shared_library_button" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="6dp" android:text="Join" app:icon="@drawable/ic_document"/>
         </LinearLayout>
         <com.google.android.material.materialswitch.MaterialSwitch android:id="@+id/shared_auto_sync_switch" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="4dp" android:text="Automatically sync changes"/>
         <com.google.android.material.button.MaterialButton android:id="@+id/shared_sync_button" android:layout_width="match_parent" android:layout_height="44dp" android:layout_marginTop="4dp" android:text="Sync shared library" app:icon="@drawable/ic_cloud_backup"/>
+        <LinearLayout android:id="@+id/shared_host_actions" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:orientation="horizontal" android:visibility="gone">
+          <com.google.android.material.button.MaterialButton android:id="@+id/shared_invite_button" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1" android:text="Share" app:icon="@drawable/ic_share"/>
+          <com.google.android.material.button.MaterialButton android:id="@+id/shared_members_button" style="@style/Widget.Material3.Button.OutlinedButton" android:layout_width="0dp" android:layout_height="44dp" android:layout_marginStart="6dp" android:layout_weight="1" android:text="Members" app:icon="@drawable/ic_help"/>
+        </LinearLayout>
+        <com.google.android.material.button.MaterialButton android:id="@+id/shared_transfer_help_button" style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="40dp" android:visibility="gone" android:text="Host transfer help" app:icon="@drawable/ic_help"/>
         <com.google.android.material.button.MaterialButton android:id="@+id/disconnect_shared_library_button" style="@style/Widget.Material3.Button.TextButton" android:layout_width="wrap_content" android:layout_height="40dp" android:layout_marginTop="2dp" android:text="Leave shared library" app:icon="@drawable/ic_logout"/>
       </LinearLayout>
     </com.google.android.material.card.MaterialCardView>

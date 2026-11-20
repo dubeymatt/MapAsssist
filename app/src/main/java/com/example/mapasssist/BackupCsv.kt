@@ -8,10 +8,11 @@ object BackupCsv {
     data class BackupData(
         val files: List<TextFile>,
         val assignments: List<LedgerAssignment>,
-        val activity: List<SharedActivity> = emptyList()
+        val activity: List<SharedActivity> = emptyList(),
+        val libraryName: String = ""
     )
 
-    fun create(files: List<TextFile>, assignments: List<LedgerAssignment> = emptyList(), activity: List<SharedActivity> = emptyList()): String = buildString {
+    fun create(files: List<TextFile>, assignments: List<LedgerAssignment> = emptyList(), activity: List<SharedActivity> = emptyList(), libraryName: String = ""): String = buildString {
         appendLine("DNC Card,Date (MM/YY),Address,Supporting information")
         files.sortedWith(Comparator { first, second ->
             MapNumber.compare(first.mapNo, second.mapNo)
@@ -60,6 +61,11 @@ object BackupCsv {
                 appendLine(listOf(item.summary, item.person, item.time.toString()).joinToString(",") { csv(it) })
             }
         }
+        if (libraryName.isNotBlank()) {
+            appendLine()
+            appendLine("Shared library,Name")
+            appendLine(listOf("Shared library", libraryName.trim()).joinToString(",") { csv(it) })
+        }
     }
 
     /** Parses the same portable CSV format used for local and Drive backups. */
@@ -69,16 +75,19 @@ object BackupCsv {
         val grouped = linkedMapOf<Pair<String, String>, MutableList<DncEntry>>()
         val assignments = mutableListOf<LedgerAssignment>()
         val activity = mutableListOf<SharedActivity>()
+        var libraryName = ""
         var active: Pair<String, String>? = null
         var activeLedger: Pair<String, String>? = null
         var readingLedger = false
         var readingActivity = false
+        var readingLibrary = false
         var ledgerUsesCombinedCards = false
         parseRecords(text).drop(1).forEach { columns ->
             if (columns.isNotEmpty() && columns.any { it.isNotBlank() }) {
                 if (columns.firstOrNull()?.trim()?.equals("Ledger DNC Card", ignoreCase = true) == true ||
                     columns.firstOrNull()?.trim()?.equals("Ledger map number", ignoreCase = true) == true) {
                     readingLedger = true
+                    readingLibrary = false
                     ledgerUsesCombinedCards = columns.firstOrNull()?.trim()?.equals("Ledger DNC Card", ignoreCase = true) == true
                     active = null
                     activeLedger = null
@@ -87,8 +96,24 @@ object BackupCsv {
                 if (columns.firstOrNull()?.trim()?.equals("Shared activity", ignoreCase = true) == true) {
                     readingActivity = true
                     readingLedger = false
+                    readingLibrary = false
                     active = null
                     activeLedger = null
+                    return@forEach
+                }
+                if (columns.firstOrNull()?.trim()?.equals("Shared library", ignoreCase = true) == true &&
+                    columns.getOrElse(1) { "" }.trim().equals("Name", ignoreCase = true)) {
+                    readingLibrary = true
+                    readingLedger = false
+                    readingActivity = false
+                    active = null
+                    activeLedger = null
+                    return@forEach
+                }
+                if (readingLibrary) {
+                    if (columns.firstOrNull()?.trim()?.equals("Shared library", ignoreCase = true) == true) {
+                        libraryName = columns.getOrElse(1) { "" }.trim()
+                    }
                     return@forEach
                 }
                 if (readingActivity) {
@@ -138,7 +163,7 @@ object BackupCsv {
         }
         return BackupData(grouped.map { (key, rows) ->
             TextFile(title = key.first, mapNo = key.second, entriesJson = DncEntryCodec.encode(rows))
-        }, assignments, activity)
+        }, assignments, activity, libraryName)
     }
 
     private fun csv(value: String) = "\"${value.replace("\"", "\"\"")}\""

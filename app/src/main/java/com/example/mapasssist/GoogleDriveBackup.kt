@@ -24,6 +24,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URLEncoder
 import java.net.URL
+import java.security.MessageDigest
 import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -42,9 +43,15 @@ object GoogleDriveBackup {
     private const val LAUNCH_CHECK_WORK = "google_drive_launch_check"
     private const val SHARED_SYNC_WORK = "shared_google_drive_sync"
     private const val SHARED_DOCUMENT_URI = "shared_library_document_uri"
+    private const val SHARED_LOCAL_CHANGES_PENDING = "shared_library_local_changes_pending"
+    private const val SHARED_DOCUMENT_LAST_SYNC_HASH = "shared_library_document_last_sync_hash"
     private val driveScope = Scope(DRIVE_SCOPE)
 
     data class RemoteBackup(val id: String, val modifiedTime: Long)
+    data class SharedLibraryMember(val name: String, val email: String, val role: String)
+
+    fun sharedLibraryLink(context: Context): String? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        .getString("shared_library_file_id", null)?.let { "https://drive.google.com/open?id=$it" }
 
     fun signInIntent(context: Context): Intent {
         return client(context).signInIntent
@@ -125,12 +132,18 @@ object GoogleDriveBackup {
             .remove("shared_library_state")
             .remove("shared_library_auto_sync")
             .remove("shared_library_role")
+            .remove(SHARED_LOCAL_CHANGES_PENDING)
+            .remove(SHARED_DOCUMENT_LAST_SYNC_HASH)
             .apply()
     }
 
     /** Queues an upload/download after a local save. Local storage always remains the first save target. */
     fun queueAutomaticSharedSync(context: Context) {
-        if (!isSharedLibraryConfigured(context) || !isSharedAutoSyncEnabled(context)) return
+        if (!isSharedLibraryConfigured(context)) return
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(SHARED_LOCAL_CHANGES_PENDING, true)
+            .apply()
+        if (!isSharedAutoSyncEnabled(context)) return
         if (sharedDocumentUri(context) == null && !hasConnectedAccount(context)) return
         setSharedSyncState(context, "pending")
         val request = OneTimeWorkRequestBuilder<SharedLibrarySyncWorker>()
@@ -158,6 +171,8 @@ object GoogleDriveBackup {
                 .putString("shared_library_file_id", fileId)
                 .putBoolean("shared_library_auto_sync", true)
                 .putString("shared_library_role", "host")
+                .putBoolean(SHARED_LOCAL_CHANGES_PENDING, false)
+                .remove(SHARED_DOCUMENT_LAST_SYNC_HASH)
                 .apply()
             markSharedSynced(context, drive.modifiedTime(fileId) ?: System.currentTimeMillis())
             WorkManager.getInstance(context).cancelUniqueWork(WEEKLY_WORK)
@@ -179,6 +194,7 @@ object GoogleDriveBackup {
             .putBoolean("shared_library_auto_sync", false)
             .putString("shared_library_role", "guest")
             .putString("shared_library_state", "initial")
+            .putBoolean(SHARED_LOCAL_CHANGES_PENDING, false)
             .apply()
         RemoteBackup(fileId, modified)
     }
@@ -191,9 +207,7 @@ object GoogleDriveBackup {
                 uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
-        }.recoverCatching {
-            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }.getOrThrow()
+        }.getOrElse { error("Map Assist needs edit access to this file. Ask the owner to share it with you as an Editor.") }
         val csv = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
             ?: error("Could not read the selected file")
         val data = BackupCsv.parseBundle(csv)
@@ -205,6 +219,8 @@ object GoogleDriveBackup {
             .putBoolean("shared_library_auto_sync", false)
             .putString("shared_library_role", "guest")
             .putString("shared_library_state", "initial")
+            .putBoolean(SHARED_LOCAL_CHANGES_PENDING, false)
+            .remove(SHARED_DOCUMENT_LAST_SYNC_HASH)
             .apply()
         RemoteBackup("", modified)
     }
@@ -263,9 +279,8 @@ object GoogleDriveBackup {
             val drive = authenticatedDrive(context)
             if (!drive.fileExists(fileId)) return@withContext markSharedMissing(context)
             val remoteModified = drive.modifiedTime(fileId) ?: error("Could not read the shared library")
-            val localModified = maxOf(AppDatabase.getDatabase(context).textFileDao().latestModified() ?: 0L, LedgerStore.lastModified(context))
             val remoteChanged = remoteModified > lastSync
-            val localChanged = localModified > lastSync
+            val localChanged = hasPendingSharedLocalChanges(context)
             when {
                 remoteChanged && localChanged -> {
                     setSharedSyncState(context, "conflict")
@@ -284,11 +299,40 @@ object GoogleDriveBackup {
         }
     }
 
-    private fun markSharedSynced(context: Context, timestamp: Long) {
+    private fun markSharedSynced(context: Context, timestamp: Long, documentHash: String? = null) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putLong("shared_library_last_sync", timestamp)
             .putString("shared_library_state", "synced")
+            .putBoolean(SHARED_LOCAL_CHANGES_PENDING, false)
+            .also { editor ->
+                if (documentHash != null) editor.putString(SHARED_DOCUMENT_LAST_SYNC_HASH, documentHash)
+            }
             .apply()
+    }
+
+    private fun hasPendingSharedLocalChanges(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        .getBoolean(SHARED_LOCAL_CHANGES_PENDING, false)
+
+    private suspend fun sharedLibraryCsv(context: Context): String = BackupCsv.create(
+        AppDatabase.getDatabase(context).textFileDao().getAllForBackup(),
+        LedgerStore.read(context),
+        SharedActivityStore.read(context)
+    )
+
+    suspend fun sharedLibraryMembers(context: Context): List<SharedLibraryMember> = withContext(Dispatchers.IO) {
+        check(isSharedLibraryHost(context)) { "Only the host can view the member list" }
+        val fileId = requireNotNull(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString("shared_library_file_id", null)) { "No shared library is connected" }
+        authenticatedDrive(context).listPermissions(fileId)
+    }
+
+    suspend fun inviteToSharedLibrary(context: Context, email: String): String = withContext(Dispatchers.IO) {
+        check(isSharedLibraryHost(context)) { "Only the host can invite members" }
+        require(android.util.Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) { "Enter a valid email address" }
+        val fileId = requireNotNull(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString("shared_library_file_id", null)) { "No shared library is connected" }
+        authenticatedDrive(context).shareFile(fileId, email.trim())
+        "Invitation sent to ${email.trim()}"
     }
 
     private fun sharedDocumentUri(context: Context): Uri? = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -302,6 +346,10 @@ object GoogleDriveBackup {
         }
     }.getOrNull()
 
+    private fun csvHash(value: String): String = MessageDigest.getInstance("SHA-256")
+        .digest(value.toByteArray(StandardCharsets.UTF_8))
+        .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+
     private fun sharedCsv(context: Context): String = context.contentResolver.openInputStream(requireNotNull(sharedDocumentUri(context)))
         ?.bufferedReader()?.use { it.readText() } ?: error("Could not read the shared library")
 
@@ -313,26 +361,26 @@ object GoogleDriveBackup {
         SharedActivityStore.replaceFromRemote(context, restored.activity)
     }
 
-    private suspend fun restoreSharedDocument(context: Context, uri: Uri): String {
+    private suspend fun restoreSharedDocument(context: Context, uri: Uri, csv: String = sharedCsv(context)): String {
         try {
-            replaceSharedData(context, sharedCsv(context))
-            markSharedSynced(context, sharedDocumentModified(context, uri) ?: System.currentTimeMillis())
+            replaceSharedData(context, csv)
+            markSharedSynced(context, sharedDocumentModified(context, uri) ?: System.currentTimeMillis(), csvHash(csv))
             return "Shared library downloaded"
         } catch (error: Throwable) {
-            markSharedSyncFailed(context)
+            if (error is java.io.FileNotFoundException || error is SecurityException) markSharedMissing(context) else markSharedSyncFailed(context)
             throw error
         }
     }
 
     private suspend fun uploadSharedDocument(context: Context, uri: Uri): String {
         try {
-            val csv = BackupCsv.create(AppDatabase.getDatabase(context).textFileDao().getAllForBackup(), LedgerStore.read(context), SharedActivityStore.read(context))
+            val csv = sharedLibraryCsv(context)
             context.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use { it.write(csv) }
                 ?: error("Could not write to the shared library")
-            markSharedSynced(context, sharedDocumentModified(context, uri) ?: System.currentTimeMillis())
+            markSharedSynced(context, sharedDocumentModified(context, uri) ?: System.currentTimeMillis(), csvHash(csv))
             return "Shared library updated"
         } catch (error: Throwable) {
-            markSharedSyncFailed(context)
+            if (error is java.io.FileNotFoundException || error is SecurityException) markSharedMissing(context) else markSharedSyncFailed(context)
             throw error
         }
     }
@@ -345,30 +393,40 @@ object GoogleDriveBackup {
             return "Shared library needs an initial download or upload"
         }
         return try {
+            val remoteCsv = sharedCsv(context)
+            val remoteHash = csvHash(remoteCsv)
+            val localCsv = sharedLibraryCsv(context)
+            val localHash = csvHash(localCsv)
+            val baselineHash = preferences.getString(SHARED_DOCUMENT_LAST_SYNC_HASH, null)
             val remoteModified = sharedDocumentModified(context, uri) ?: System.currentTimeMillis()
-            val localModified = maxOf(AppDatabase.getDatabase(context).textFileDao().latestModified() ?: 0L, LedgerStore.lastModified(context))
-            val remoteChanged = remoteModified > lastSync
-            val localChanged = localModified > lastSync
+            if (remoteHash == localHash) {
+                markSharedSynced(context, remoteModified, remoteHash)
+                return "Shared library is up to date"
+            }
+            val remoteChanged = baselineHash?.let { it != remoteHash } ?: (remoteModified > lastSync)
+            val localChanged = hasPendingSharedLocalChanges(context)
             when {
                 remoteChanged && localChanged -> {
                     setSharedSyncState(context, "conflict")
                     "Shared library needs attention"
                 }
-                remoteChanged -> restoreSharedDocument(context, uri)
+                remoteChanged -> restoreSharedDocument(context, uri, remoteCsv)
                 localChanged -> uploadSharedDocument(context, uri)
                 else -> {
-                    markSharedSynced(context, lastSync)
-                    "Shared library is up to date"
+                    // An older app may not yet have a document hash. With no local
+                    // edit recorded, the selected shared file is the safe source.
+                    restoreSharedDocument(context, uri, remoteCsv)
                 }
             }
         } catch (error: Throwable) {
-            markSharedSyncFailed(context)
+            if (error is java.io.FileNotFoundException || error is SecurityException) markSharedMissing(context) else markSharedSyncFailed(context)
             throw error
         }
     }
 
     /** Never recreate a shared file automatically: only its owner may explicitly create a replacement. */
     private fun markSharedMissing(context: Context): String {
+        WorkManager.getInstance(context).cancelUniqueWork(SHARED_SYNC_WORK)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString("shared_library_state", "missing")
             .apply()
@@ -558,6 +616,33 @@ object GoogleDriveBackup {
             val response = request("GET", "https://www.googleapis.com/drive/v3/files/$id?alt=media", null)
             check(response.code == 200) { "Could not read the Google Drive backup" }
             return response.body
+        }
+
+        fun listPermissions(id: String): List<SharedLibraryMember> {
+            val response = request("GET", "https://www.googleapis.com/drive/v3/files/$id/permissions?fields=permissions(displayName,emailAddress,role,type)&supportsAllDrives=true", null)
+            check(response.code == 200) { "Could not read library members" }
+            val values = JSONObject(response.body).optJSONArray("permissions") ?: return emptyList()
+            return buildList {
+                for (index in 0 until values.length()) {
+                    val permission = values.getJSONObject(index)
+                    add(SharedLibraryMember(
+                        permission.optString("displayName").ifBlank { permission.optString("emailAddress").ifBlank { "Anyone with access" } },
+                        permission.optString("emailAddress"),
+                        permission.optString("role").replaceFirstChar { it.uppercase() }
+                    ))
+                }
+            }
+        }
+
+        fun shareFile(id: String, email: String) {
+            val body = JSONObject().put("type", "user").put("role", "writer").put("emailAddress", email)
+                .toString().toByteArray(StandardCharsets.UTF_8)
+            val message = URLEncoder.encode(
+                "You have been invited to a Map Assist shared library. In Map Assist, open Settings → Shared library → Join, then choose DO NOT DELETE MAP ASSIST SHARE.csv from Google Drive.",
+                "UTF-8"
+            )
+            val response = request("POST", "https://www.googleapis.com/drive/v3/files/$id/permissions?sendNotificationEmail=true&emailMessage=$message&supportsAllDrives=true", body, "application/json")
+            check(response.code in 200..299) { "Google Drive could not send the invitation" }
         }
 
         fun modifiedTime(id: String): Long? {
