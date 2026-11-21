@@ -52,7 +52,15 @@ object LedgerStore {
                     if (added.assignedTo.isBlank()) "Added business territory ${added.mapNo}" else "Assigned ${added.mapNo} to ${added.assignedTo}"
                 }
                 assignments.size < previous.size -> previous.firstOrNull { it !in assignments }?.let { "Deleted Ledger entry ${it.mapNo}" }
-                assignments != previous -> assignments.firstOrNull { it !in previous }?.let { "Updated Ledger entry ${it.mapNo}" }
+                assignments != previous -> assignments.firstOrNull { it !in previous }?.let { changed ->
+                    val before = previous.firstOrNull { it.mapNo == changed.mapNo && it.assignedOn == changed.assignedOn }
+                    when {
+                        before?.returnedOn != changed.returnedOn && changed.returnedOn.isNotBlank() -> "Completed ${changed.mapNo} on ${changed.returnedOn}"
+                        before?.assignedTo != changed.assignedTo -> "Assigned ${changed.mapNo} to ${changed.assignedTo}"
+                        before?.notes != changed.notes -> "Changed notes for ${changed.mapNo}"
+                        else -> "Modified ledger entry ${changed.mapNo}"
+                    }
+                }
                 else -> null
             }
             summary?.let { SharedActivityStore.record(context, it) }

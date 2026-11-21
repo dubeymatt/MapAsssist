@@ -18,14 +18,21 @@ class TextFileViewModel(application: Application) : AndroidViewModel(application
 
     fun insert(textFile: TextFile) = viewModelScope.launch {
         repository.insert(textFile)
-        SharedActivityStore.record(getApplication(), "Created DNC card ${textFile.mapNo} – ${textFile.title}")
+        SharedActivityStore.record(getApplication(), "Added DNC card ${textFile.mapNo} – ${textFile.title}")
         runCatching { FirebaseSharedLibrary.publishCard(getApplication(), textFile) }.onFailure { FirebaseSharedLibrary.queueSync(getApplication()) }
     }
 
     fun update(textFile: TextFile) = viewModelScope.launch {
         val previous = repository.getTextFileById(textFile.id)
         repository.update(textFile)
-        SharedActivityStore.record(getApplication(), "Updated DNC card ${textFile.mapNo} – ${textFile.title}")
+        val detail = when {
+            previous == null -> "Modified DNC card ${textFile.mapNo} – ${textFile.title}"
+            previous.mapNo != textFile.mapNo -> "Changed DNC map number from ${previous.mapNo} to ${textFile.mapNo}"
+            previous.title != textFile.title -> "Renamed DNC card ${textFile.mapNo} from ${previous.title} to ${textFile.title}"
+            previous.entriesJson != textFile.entriesJson -> "Changed entries in DNC card ${textFile.mapNo} – ${textFile.title}"
+            else -> "Modified DNC card ${textFile.mapNo} – ${textFile.title}"
+        }
+        SharedActivityStore.record(getApplication(), detail)
         runCatching {
             if (previous != null && previous.mapNo != textFile.mapNo) FirebaseSharedLibrary.deleteCard(getApplication(), previous.mapNo)
             FirebaseSharedLibrary.publishCard(getApplication(), textFile)
@@ -34,7 +41,7 @@ class TextFileViewModel(application: Application) : AndroidViewModel(application
 
     fun delete(textFile: TextFile) = viewModelScope.launch {
         repository.delete(textFile)
-        SharedActivityStore.record(getApplication(), "Deleted DNC card ${textFile.mapNo} – ${textFile.title}")
+        SharedActivityStore.record(getApplication(), "Removed DNC card ${textFile.mapNo} – ${textFile.title}")
         runCatching { FirebaseSharedLibrary.deleteCard(getApplication(), textFile.mapNo) }.onFailure { FirebaseSharedLibrary.queueSync(getApplication()) }
     }
 

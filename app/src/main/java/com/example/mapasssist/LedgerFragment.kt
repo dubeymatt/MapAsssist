@@ -19,6 +19,8 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.example.mapasssist.data.TextFile
 import com.example.mapasssist.data.TextFileViewModel
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -58,6 +60,13 @@ class LedgerFragment : Fragment() {
         ledgerAdapter = adapter
         view.findViewById<RecyclerView>(R.id.ledger_recycler).layoutManager = LinearLayoutManager(requireContext())
         view.findViewById<RecyclerView>(R.id.ledger_recycler).adapter = adapter
+        val refreshLayout = view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(R.id.ledger_refresh)
+        refreshLayout.setOnRefreshListener {
+            viewLifecycleOwner.lifecycleScope.launch {
+                runCatching { FirebaseSharedLibrary.refresh(requireContext()) }
+                refreshLayout.isRefreshing = false
+            }
+        }
         view.findViewById<MaterialButton>(R.id.ledger_sort_button).apply {
             iconTint = ColorStateList.valueOf(AccentPreferences.control(requireContext()))
             setOnClickListener { showSortMenu(this) }

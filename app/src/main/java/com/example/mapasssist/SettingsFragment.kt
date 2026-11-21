@@ -53,7 +53,7 @@ class SettingsFragment : Fragment() {
                     updateGoogleAccount()
                 } else {
                     FirebaseAuth.getInstance().signInWithCredential(GoogleAuthProvider.getCredential(token, null))
-                        .addOnSuccessListener { updateGoogleAccount(); reconcileGoogleDriveBackup(); updateSharedLibraryStatus() }
+                        .addOnSuccessListener { FirebaseSharedLibrary.start(requireContext()); updateGoogleAccount(); reconcileGoogleDriveBackup(); updateSharedLibraryStatus() }
                         .addOnFailureListener { Toast.makeText(requireContext(), "Google account could not be verified: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() }
                 }
             }
@@ -332,8 +332,8 @@ class SettingsFragment : Fragment() {
 
     private fun showGoogleAccountHelp() {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("How Google Drive is used")
-            .setMessage("When you choose a Google account, Map Assist creates a folder called Map Assist in that account's Google Drive.\n\nManual Google Drive backups are saved there. Shared libraries are also stored there as a CSV file, which you can share with other people as Editors.\n\nMap Assist only accesses files that it creates or that you explicitly connect as a shared library.")
+            .setTitle("Your Google account")
+            .setMessage("Your Google account identifies you in Map Assist and lets you use personal Google Drive backups.\n\nShared libraries are live and private: they use Map Assist’s secure online database, not files in your Google Drive. Join one with an invite code from its host.")
             .setPositiveButton("OK", null)
             .show()
     }
@@ -357,6 +357,7 @@ class SettingsFragment : Fragment() {
             return
         }
         binding.createSharedLibraryButton.isEnabled = false
+        binding.createSharedLibraryButton.text = "Creating…"
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching { FirebaseSharedLibrary.create(requireContext()) }
                 .onSuccess {
@@ -368,7 +369,7 @@ class SettingsFragment : Fragment() {
                         .show()
                 }
                 .onFailure { Toast.makeText(requireContext(), "Could not create shared library: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() }
-            if (_binding != null) binding.createSharedLibraryButton.isEnabled = true
+            if (_binding != null) { binding.createSharedLibraryButton.isEnabled = true; binding.createSharedLibraryButton.text = "Create" }
         }
     }
 
@@ -393,6 +394,8 @@ class SettingsFragment : Fragment() {
     }
 
     private fun showInviteDialog() {
+        binding.sharedInviteButton.isEnabled = false
+        binding.sharedInviteButton.text = "Preparing…"
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching { FirebaseSharedLibrary.createInvite(requireContext()) }
                 .onSuccess { code ->
@@ -402,6 +405,7 @@ class SettingsFragment : Fragment() {
                     }, "Share Map Assist invite"))
                 }
                 .onFailure { Toast.makeText(requireContext(), "Could not create invite: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() }
+            if (_binding != null) { binding.sharedInviteButton.isEnabled = true; binding.sharedInviteButton.text = "Share" }
         }
     }
 
@@ -410,22 +414,69 @@ class SettingsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching { FirebaseSharedLibrary.members(requireContext()) }
                 .onSuccess { members ->
-                    val text = if (members.isEmpty()) "No individual members are listed. The library may be shared through a link or group." else members.joinToString("\n\n") { member ->
-                        "${member.name}\n${member.email.ifBlank { "Google account" }} · ${member.role}"
-                    }
-                    MaterialAlertDialogBuilder(requireContext()).setTitle("Library members").setMessage(text).setPositiveButton("Close", null).show()
+                    val host = FirebaseSharedLibrary.isHost(requireContext())
+                    val labels = members.map { member -> "${member.name}\n${member.email.ifBlank { "Google account" }} · ${member.role}" }.toTypedArray()
+                    MaterialAlertDialogBuilder(requireContext()).setTitle("Library members")
+                        .setItems(labels) { _, index ->
+                            val member = members[index]
+                            if (host && member.role != "Host") confirmRemoveMember(member)
+                        }
+                        .setNegativeButton("Close", null).show()
                 }
                 .onFailure { error -> Toast.makeText(requireContext(), "Could not load members: ${error.message ?: "try again"}", Toast.LENGTH_LONG).show() }
             if (_binding != null) binding.sharedMembersButton.isEnabled = true
         }
     }
 
+    private fun confirmRemoveMember(member: FirebaseSharedLibrary.Member) {
+        MaterialAlertDialogBuilder(requireContext()).setTitle("Remove ${member.name}?")
+            .setMessage("They will immediately lose access to this shared library on all of their devices.")
+            .setNegativeButton("Cancel", null).setPositiveButton("Remove") { _, _ ->
+                viewLifecycleOwner.lifecycleScope.launch {
+                    runCatching { FirebaseSharedLibrary.removeMember(requireContext(), member) }
+                        .onSuccess { Toast.makeText(requireContext(), "Member removed", Toast.LENGTH_SHORT).show() }
+                        .onFailure { Toast.makeText(requireContext(), "Could not remove member: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() }
+                }
+            }.show()
+    }
+
     private fun showHostTransferHelp() {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Host transfer and recovery")
-            .setMessage("The host is the device that created this library. To hand it over, use Google Drive's Share or Manage access screen to make the new person an Editor or transfer ownership where Google allows it.\n\nThe new person should then join by choosing the same protected CSV in Map Assist. Keep at least one local spreadsheet backup before changing ownership or replacing a missing library.")
-            .setPositiveButton("OK", null)
-            .show()
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { FirebaseSharedLibrary.members(requireContext()).filter { it.role != "Host" } }
+                .onSuccess { members ->
+                    MaterialAlertDialogBuilder(requireContext()).setTitle("Manage shared library")
+                        .setMessage("Before leaving, transfer the host role to a current member or permanently delete this shared library for everyone.")
+                        .setNegativeButton("Cancel", null)
+                        .setNeutralButton("Delete library") { _, _ -> confirmDeleteLibrary() }
+                        .setPositiveButton("Transfer host") { _, _ -> chooseNewHost(members) }.show()
+                }
+                .onFailure { Toast.makeText(requireContext(), "Could not load members", Toast.LENGTH_LONG).show() }
+        }
+    }
+
+    private fun chooseNewHost(members: List<FirebaseSharedLibrary.Member>) {
+        if (members.isEmpty()) { Toast.makeText(requireContext(), "Invite another member before transferring the host role", Toast.LENGTH_LONG).show(); return }
+        MaterialAlertDialogBuilder(requireContext()).setTitle("Choose new host")
+            .setItems(members.map { it.name }.toTypedArray()) { _, index ->
+                val member = members[index]
+                MaterialAlertDialogBuilder(requireContext()).setTitle("Transfer host role?")
+                    .setMessage("${member.name} will manage members and can delete the library. You will remain a member.")
+                    .setNegativeButton("Cancel", null).setPositiveButton("Transfer") { _, _ ->
+                        viewLifecycleOwner.lifecycleScope.launch { runCatching { FirebaseSharedLibrary.transferHost(requireContext(), member) }
+                            .onSuccess { updateSharedLibraryStatus(); Toast.makeText(requireContext(), "Host role transferred", Toast.LENGTH_SHORT).show() }
+                            .onFailure { Toast.makeText(requireContext(), "Could not transfer host: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() } }
+                    }.show()
+            }.show()
+    }
+
+    private fun confirmDeleteLibrary() {
+        MaterialAlertDialogBuilder(requireContext()).setTitle("Delete shared library?")
+            .setMessage("This permanently removes the live shared library for every member. Their local data stays on their own devices. Export a backup first if you are unsure.")
+            .setNegativeButton("Cancel", null).setPositiveButton("Delete for everyone") { _, _ ->
+                viewLifecycleOwner.lifecycleScope.launch { runCatching { FirebaseSharedLibrary.deleteLibrary(requireContext()) }
+                    .onSuccess { updateSharedLibraryStatus(); Toast.makeText(requireContext(), "Shared library deleted", Toast.LENGTH_SHORT).show() }
+                    .onFailure { Toast.makeText(requireContext(), "Could not delete library: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() } }
+            }.show()
     }
 
     private fun showSharedLibraryChoice(remote: GoogleDriveBackup.RemoteBackup) {
@@ -512,6 +563,7 @@ class SettingsFragment : Fragment() {
     }
 
     private fun confirmLeaveSharedLibrary() {
+        if (FirebaseSharedLibrary.isHost(requireContext())) { showHostTransferHelp(); return }
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Leave shared library?")
             .setMessage("This only disconnects this device. The shared library and other members will not be affected.")
@@ -541,14 +593,18 @@ class SettingsFragment : Fragment() {
         binding.sharedSyncButton.visibility = if (configured) View.VISIBLE else View.GONE
         binding.sharedSyncButton.text = "Sync shared library"
         binding.disconnectSharedLibraryButton.visibility = if (configured) View.VISIBLE else View.GONE
-        binding.sharedHostActions.visibility = if (configured && isHost) View.VISIBLE else View.GONE
-        binding.sharedTransferHelpButton.visibility = View.GONE
+        binding.sharedHostActions.visibility = if (configured) View.VISIBLE else View.GONE
+        binding.sharedInviteButton.visibility = if (isHost) View.VISIBLE else View.GONE
+        binding.sharedMembersButton.visibility = if (configured) View.VISIBLE else View.GONE
+        binding.sharedTransferHelpButton.visibility = if (configured && isHost) View.VISIBLE else View.GONE
+        binding.sharedTransferHelpButton.text = "Manage library"
         binding.createSharedLibraryButton.visibility = if (!configured) View.VISIBLE else View.GONE
         binding.createSharedLibraryButton.text = "Create shared library"
         binding.joinSharedLibraryButton.visibility = if (!configured) View.VISIBLE else View.GONE
         binding.sharedLibraryStatus.text = when {
             !configured && !FirebaseSharedLibrary.signedIn() -> "Sign in with Google to create or join a live shared library."
             !configured -> "Create a library or join one with a private invite code."
+            FirebaseSharedLibrary.state(requireContext()) == "removed" -> "You were removed from this shared library. Your local data has not been deleted."
             FirebaseSharedLibrary.state(requireContext()) == "failed" -> "Live sync needs attention. Check your connection, then use Sync shared library."
             else -> "Live sync is on. Changes appear automatically for library members."
         }
@@ -561,6 +617,7 @@ class SettingsFragment : Fragment() {
         val message = when (state) {
             "pending" -> "Shared library sync is pending. Your changes will be sent when a connection is available."
             "failed" -> "Shared library sync failed. Check your connection and use Sync shared library below to try again."
+            "removed" -> "You no longer have access to this shared library. Your saved local data remains on this device."
             else -> null
         }
         binding.sharedSyncAttentionCard.visibility = if (message == null) View.GONE else View.VISIBLE
@@ -628,11 +685,13 @@ class SettingsFragment : Fragment() {
     private fun formatLastSync(time: Long) = java.text.SimpleDateFormat("d MMM yyyy, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(time))
     private fun confirmDisconnect() {
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Disconnect Google Drive?")
-            .setMessage("This disconnects this device from Google Drive. Shared-library syncing and Google Drive backup features will be unavailable until you sign in again. Shared files and backups in Google Drive will not be deleted.")
+            .setTitle("Disconnect Google account?")
+            .setMessage("This pauses live shared-library access and Google Drive backups on this device. The library itself and this device’s local data will not be deleted. Signing in again restores access if you are still a member.")
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Disconnect") { _, _ ->
                 GoogleDriveBackup.disconnect(requireContext()).addOnCompleteListener {
+                    FirebaseAuth.getInstance().signOut()
+                    FirebaseSharedLibrary.signedOut(requireContext())
                     GoogleDriveBackup.clearConnection(requireContext())
                     if (_binding != null) { updateGoogleAccount(); updateDriveStatus(); updateSharedLibraryStatus() }
                     Toast.makeText(requireContext(), "Google Drive disconnected", Toast.LENGTH_SHORT).show()

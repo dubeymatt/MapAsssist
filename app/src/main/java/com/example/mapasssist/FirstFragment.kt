@@ -63,6 +63,12 @@ class FirstFragment : Fragment() {
         }, { stageUpdate(adapter, it) }, { stageDelete(adapter, it) }, { file -> shareMapAndDnc(file) })
         cardAdapter = adapter
         binding.recyclerview.adapter = adapter
+        binding.dncsRefresh.setOnRefreshListener {
+            viewLifecycleOwner.lifecycleScope.launch {
+                runCatching { FirebaseSharedLibrary.refresh(requireContext()) }
+                binding.dncsRefresh.isRefreshing = false
+            }
+        }
         val addButton = requireActivity().findViewById<com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton>(R.id.add_fab)
         var fabTransitioning = false
         binding.recyclerview.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {

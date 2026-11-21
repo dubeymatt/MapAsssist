@@ -27,10 +27,11 @@ object FirebaseSharedLibrary {
     private const val ROLE = "firebase_shared_library_role"
     private const val STATE = "shared_library_state"
     private const val APPLYING_REMOTE = "firebase_applying_remote"
+    private const val INVITE_CODE = "firebase_shared_invite_code"
     private const val ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     private var listeners = mutableListOf<ListenerRegistration>()
 
-    data class Member(val name: String, val email: String, val role: String)
+    data class Member(val id: String, val name: String, val email: String, val role: String)
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private fun db() = FirebaseFirestore.getInstance()
@@ -63,29 +64,91 @@ object FirebaseSharedLibrary {
         val user = FirebaseAuth.getInstance().currentUser ?: error("Sign in with Google first")
         db().collection("map_assist_libraries").document(id).collection("members").document(user.uid)
             .set(memberMap(user.displayName, user.email, "Member") + mapOf("inviteCode" to code.trim().uppercase()), SetOptions.merge()).await()
+        db().collection("map_assist_libraries").document(id).collection("activity").add(
+            mapOf("time" to System.currentTimeMillis(), "person" to user.displayName.orEmpty().ifBlank { user.email.orEmpty() }, "summary" to "Joined the shared library")
+        ).await()
         prefs(context).edit().putString(LIBRARY_ID, id).putString(ROLE, "member").putString(STATE, "syncing").apply()
         start(context)
     }
 
     suspend fun createInvite(context: Context): String {
         check(isHost(context)) { "Only the host can invite members" }
+        prefs(context).getString(INVITE_CODE, null)?.let { return it }
         val code = buildString { repeat(8) { append(ALPHABET[SecureRandom().nextInt(ALPHABET.length)]) } }
         db().collection("map_assist_invites").document(code).set(mapOf("libraryId" to libraryId(context), "createdAt" to System.currentTimeMillis(), "createdBy" to uid())).await()
+        prefs(context).edit().putString(INVITE_CODE, code).apply()
         return code
     }
 
     suspend fun members(context: Context): List<Member> = library(context).collection("members").get().await().documents.map {
-        Member(it.getString("name").orEmpty().ifBlank { "Member" }, it.getString("email").orEmpty(), it.getString("role").orEmpty().ifBlank { "Member" })
+        Member(it.id, it.getString("name").orEmpty().ifBlank { "Member" }, it.getString("email").orEmpty(), it.getString("role").orEmpty().ifBlank { "Member" })
     }.sortedBy { it.name.lowercase() }
+
+    suspend fun removeMember(context: Context, member: Member) {
+        check(isHost(context)) { "Only the host can remove members" }
+        check(member.id != uid()) { "The host cannot remove themselves" }
+        library(context).collection("activity").add(mapOf("time" to System.currentTimeMillis(), "person" to FirebaseAuth.getInstance().currentUser?.displayName.orEmpty().ifBlank { "Host" }, "summary" to "Removed ${member.name} from the shared library")).await()
+        library(context).collection("members").document(member.id).delete().await()
+    }
+
+    suspend fun transferHost(context: Context, member: Member) {
+        check(isHost(context)) { "Only the host can transfer ownership" }
+        check(member.id != uid()) { "Choose another member" }
+        val root = library(context)
+        root.set(mapOf("hostUid" to member.id, "updatedAt" to System.currentTimeMillis()), SetOptions.merge()).await()
+        root.collection("members").document(member.id).set(mapOf("role" to "Host"), SetOptions.merge()).await()
+        root.collection("members").document(uid()).set(mapOf("role" to "Member"), SetOptions.merge()).await()
+        root.collection("activity").add(mapOf("time" to System.currentTimeMillis(), "person" to "Host", "summary" to "Transferred host role to ${member.name}")).await()
+        prefs(context).edit().putString(ROLE, "member").apply()
+    }
+
+    suspend fun deleteLibrary(context: Context) {
+        check(isHost(context)) { "Only the host can delete the library" }
+        val root = library(context)
+        suspend fun removeCollection(name: String) { root.collection(name).get().await().documents.forEach { it.reference.delete().await() } }
+        removeCollection("cards"); removeCollection("activity"); removeCollection("system")
+        root.collection("members").get().await().documents.filter { it.id != uid() }.forEach { it.reference.delete().await() }
+        root.delete().await()
+        root.collection("members").document(uid()).delete().await()
+        leave(context)
+    }
+
+    suspend fun refresh(context: Context) {
+        if (!isConfigured(context)) return
+        val root = library(context)
+        val cards = root.collection("cards").get(com.google.firebase.firestore.Source.SERVER).await().documents.mapNotNull(::cardFrom)
+        applyRemoteCards(context, cards)
+        val ledger = root.collection("system").document("ledger").get(com.google.firebase.firestore.Source.SERVER).await()
+        val assignments = (ledger.get("assignments") as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let(::assignmentFrom) }.orEmpty()
+        LedgerStore.replace(context, assignments, notifySharedSync = false)
+        setState(context, "synced")
+    }
+
+    suspend fun clearActivity(context: Context) {
+        check(isHost(context)) { "Only the host can clear shared activity" }
+        library(context).collection("activity").get().await().documents.forEach { it.reference.delete().await() }
+        SharedActivityStore.replaceFromRemote(context, emptyList())
+    }
 
     fun leave(context: Context) {
         stop()
-        prefs(context).edit().remove(LIBRARY_ID).remove(ROLE).remove(STATE).apply()
+        prefs(context).edit().remove(LIBRARY_ID).remove(ROLE).remove(INVITE_CODE).remove(STATE).apply()
     }
+
+    /** Signing out pauses live access but deliberately remembers the library. */
+    fun signedOut(context: Context) { stop(); if (isConfigured(context)) setState(context, "signed_out") }
 
     fun start(context: Context) {
         if (!isConfigured(context) || listeners.isNotEmpty()) return
+        if (!signedIn()) { setState(context, "signed_out"); return }
         val root = library(context)
+        listeners += root.collection("members").document(uid()).addSnapshotListener { snapshot, error ->
+            if (error != null) { setState(context, "failed"); return@addSnapshotListener }
+            if (snapshot != null && !snapshot.exists()) {
+                stop()
+                prefs(context).edit().remove(LIBRARY_ID).remove(ROLE).remove(INVITE_CODE).putString(STATE, "removed").apply()
+            }
+        }
         listeners += root.collection("cards").addSnapshotListener { snapshot, error ->
             if (error != null) { setState(context, "failed"); return@addSnapshotListener }
             val cards = snapshot?.documents?.mapNotNull(::cardFrom).orEmpty()

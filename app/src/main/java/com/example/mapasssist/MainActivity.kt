@@ -53,7 +53,7 @@ class MainActivity : AppCompatActivity() {
         val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment_content_main) as NavHostFragment
         val navController = navHostFragment.navController
         binding.sharedSyncPill.setOnClickListener {
-            if (FirebaseSharedLibrary.state(this) in setOf("pending", "failed")) {
+            if (FirebaseSharedLibrary.state(this) in setOf("pending", "failed", "removed")) {
                 selectTab(navController, R.id.SettingsFragment)
             }
         }
@@ -186,7 +186,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Keeps background sync feedback visible without turning the toolbar into a progress screen. */
     private fun updateSharedSyncPill(showStoredSuccess: Boolean = true) {
-        if (!::binding.isInitialized || !FirebaseSharedLibrary.isConfigured(this)) {
+        if (!::binding.isInitialized || (!FirebaseSharedLibrary.isConfigured(this) && FirebaseSharedLibrary.state(this) != "removed")) {
             hideSharedSyncPill(immediate = true)
             updateSettingsSyncBadge()
             return
@@ -196,6 +196,7 @@ class MainActivity : AppCompatActivity() {
             "syncing" -> showSharedSyncPill("Syncing", R.drawable.ic_cloud_backup, AccentPreferences.primary(this), false)
             "synced" -> if (showStoredSuccess) showSharedSyncPill("Synced", R.drawable.ic_check, AccentPreferences.primary(this), true) else hideSharedSyncPill(immediate = true)
             "failed" -> showSharedSyncPill("Sync failed", R.drawable.ic_cloud_backup, getColor(R.color.destructive), false, true, true)
+            "removed" -> showSharedSyncPill("Removed from library", R.drawable.ic_logout, getColor(R.color.destructive), false, true, true)
             "conflict" -> showSharedSyncPill("Sync needs attention", R.drawable.ic_cloud_backup, getColor(R.color.destructive), false, true, true)
             "missing" -> showSharedSyncPill("Shared file missing", R.drawable.ic_cloud_backup, getColor(R.color.destructive), false, true, true)
             else -> hideSharedSyncPill(immediate = true)
@@ -289,7 +290,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateSettingsSyncBadge() {
         val state = FirebaseSharedLibrary.state(this)
-        val needsAttention = state in setOf("pending", "failed")
+        val needsAttention = state in setOf("pending", "failed", "removed")
         val badge = binding.bottomNavigation.getOrCreateBadge(R.id.navigation_settings)
         badge.backgroundColor = getColor(R.color.destructive)
         badge.clearNumber()
