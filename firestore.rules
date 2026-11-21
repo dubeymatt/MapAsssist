@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function member(libraryId) {
+      return signedIn() && exists(/databases/$(database)/documents/map_assist_libraries/$(libraryId)/members/$(request.auth.uid));
+    }
+    function host(libraryId) {
+      return member(libraryId) && get(/databases/$(database)/documents/map_assist_libraries/$(libraryId)).data.hostUid == request.auth.uid;
+    }
+    function owner(libraryId) {
+      return signedIn() && get(/databases/$(database)/documents/map_assist_libraries/$(libraryId)).data.hostUid == request.auth.uid;
+    }
+    function validInvite(libraryId, inviteCode) {
+      return exists(/databases/$(database)/documents/map_assist_invites/$(inviteCode)) &&
+        get(/databases/$(database)/documents/map_assist_invites/$(inviteCode)).data.libraryId == libraryId;
+    }
+
+    match /map_assist_libraries/{libraryId} {
+      allow create: if signedIn() && request.resource.data.hostUid == request.auth.uid;
+      allow read: if member(libraryId);
+      allow update: if host(libraryId);
+      allow delete: if false;
+
+      match /members/{userId} {
+        allow read: if member(libraryId);
+        // The owner needs to create their own first membership document before
+        // they can satisfy member()/host().
+        allow create: if owner(libraryId) ||
+          (signedIn() && userId == request.auth.uid && validInvite(libraryId, request.resource.data.inviteCode));
+        allow update: if host(libraryId) || userId == request.auth.uid;
+        allow delete: if host(libraryId) || userId == request.auth.uid;
+      }
+      match /cards/{cardId} { allow read, write: if member(libraryId); }
+      match /activity/{activityId} { allow read, create: if member(libraryId); allow update, delete: if false; }
+      match /system/{documentId} { allow read, write: if member(libraryId); }
+    }
+    match /map_assist_invites/{code} {
+      allow get: if signedIn();
+      allow create, update: if signedIn() && host(request.resource.data.libraryId);
+      allow delete: if signedIn() && host(resource.data.libraryId);
+      allow list: if false;
+    }
+  }
+}

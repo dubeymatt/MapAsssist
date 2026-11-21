@@ -26,7 +26,7 @@ object SharedActivityStore {
     }.getOrDefault(emptyList()).sortedByDescending { it.time }
 
     fun record(context: Context, summary: String) {
-        if (!GoogleDriveBackup.isSharedLibraryConfigured(context)) return
+        if (!FirebaseSharedLibrary.isConfigured(context)) return
         val account = GoogleSignIn.getLastSignedInAccount(context)
         val person = account?.displayName?.takeIf { it.isNotBlank() }
             ?: account?.email?.takeIf { it.isNotBlank() }
@@ -34,6 +34,7 @@ object SharedActivityStore {
         val entry = SharedActivity(System.currentTimeMillis(), person, summary)
         val entries = (read(context) + entry).sortedByDescending { it.time }.take(MAX_ENTRIES)
         save(context, entries, entries.maxOfOrNull { it.time } ?: 0L)
+        FirebaseSharedLibrary.recordActivity(context, entry)
     }
 
     /** Imports remote history and exposes only entries not previously seen here. */

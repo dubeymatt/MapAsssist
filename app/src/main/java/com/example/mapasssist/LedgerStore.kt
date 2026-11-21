@@ -56,7 +56,7 @@ object LedgerStore {
                 else -> null
             }
             summary?.let { SharedActivityStore.record(context, it) }
-            GoogleDriveBackup.queueAutomaticSharedSync(context)
+            FirebaseSharedLibrary.queueSync(context)
         }
     }
 

@@ -29,7 +29,7 @@ class MainActivity : AppCompatActivity() {
     private var syncPillAction: Runnable? = null
     private var activityPillDismiss: Runnable? = null
     private val sharedSyncListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == "shared_library_state" || key == "shared_library_file_id") updateSharedSyncPill()
+        if (key == "shared_library_state" || key == "firebase_shared_library_id") updateSharedSyncPill()
         if (key == "shared_activity_incoming") updateSharedActivityPill()
     }
 
@@ -46,13 +46,14 @@ class MainActivity : AppCompatActivity() {
         updateSharedSyncPill(showStoredSuccess = false)
         updateSharedActivityPill()
         GoogleDriveBackup.disableLegacyWeeklyBackups(this)
+        FirebaseSharedLibrary.start(this)
         // Shared syncing is queued only by data edits. In particular, activity
         // recreation after changing colours or dark mode must stay local.
         setSupportActionBar(binding.toolbar)
         val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment_content_main) as NavHostFragment
         val navController = navHostFragment.navController
         binding.sharedSyncPill.setOnClickListener {
-            if (GoogleDriveBackup.sharedSyncState(this) in setOf("pending", "failed", "conflict", "missing")) {
+            if (FirebaseSharedLibrary.state(this) in setOf("pending", "failed")) {
                 selectTab(navController, R.id.SettingsFragment)
             }
         }
@@ -185,12 +186,12 @@ class MainActivity : AppCompatActivity() {
 
     /** Keeps background sync feedback visible without turning the toolbar into a progress screen. */
     private fun updateSharedSyncPill(showStoredSuccess: Boolean = true) {
-        if (!::binding.isInitialized || !GoogleDriveBackup.isSharedLibraryConfigured(this)) {
+        if (!::binding.isInitialized || !FirebaseSharedLibrary.isConfigured(this)) {
             hideSharedSyncPill(immediate = true)
             updateSettingsSyncBadge()
             return
         }
-        when (GoogleDriveBackup.sharedSyncState(this)) {
+        when (FirebaseSharedLibrary.state(this)) {
             "pending" -> showSharedSyncPill("Sync pending", R.drawable.ic_cloud_backup, Color.rgb(168, 122, 20), false, true, true)
             "syncing" -> showSharedSyncPill("Syncing", R.drawable.ic_cloud_backup, AccentPreferences.primary(this), false)
             "synced" -> if (showStoredSuccess) showSharedSyncPill("Synced", R.drawable.ic_check, AccentPreferences.primary(this), true) else hideSharedSyncPill(immediate = true)
@@ -287,8 +288,8 @@ class MainActivity : AppCompatActivity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun updateSettingsSyncBadge() {
-        val state = GoogleDriveBackup.sharedSyncState(this)
-        val needsAttention = state in setOf("pending", "failed", "conflict", "missing")
+        val state = FirebaseSharedLibrary.state(this)
+        val needsAttention = state in setOf("pending", "failed")
         val badge = binding.bottomNavigation.getOrCreateBadge(R.id.navigation_settings)
         badge.backgroundColor = getColor(R.color.destructive)
         badge.clearNumber()

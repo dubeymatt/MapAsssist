@@ -62,6 +62,12 @@ object GoogleDriveBackup {
     private fun client(context: Context) = GoogleSignIn.getClient(context,
         GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
+            // The same account session is used by Firebase Authentication for
+            // the live shared library. Google Drive remains optional backup.
+            .apply {
+                val id = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+                if (id != 0) requestIdToken(context.getString(id))
+            }
             .requestScopes(driveScope)
             .build()
     )

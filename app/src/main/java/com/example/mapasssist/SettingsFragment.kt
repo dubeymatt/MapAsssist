@@ -23,6 +23,8 @@ import java.io.OutputStreamWriter
 import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -44,7 +46,17 @@ class SettingsFragment : Fragment() {
     private val googleDriveSignIn = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
         runCatching { task.getResult(ApiException::class.java) }
-            .onSuccess { updateGoogleAccount(); reconcileGoogleDriveBackup() }
+            .onSuccess { account ->
+                val token = account.idToken
+                if (token == null) {
+                    Toast.makeText(requireContext(), "Google sign-in needs an updated Firebase configuration", Toast.LENGTH_LONG).show()
+                    updateGoogleAccount()
+                } else {
+                    FirebaseAuth.getInstance().signInWithCredential(GoogleAuthProvider.getCredential(token, null))
+                        .addOnSuccessListener { updateGoogleAccount(); reconcileGoogleDriveBackup(); updateSharedLibraryStatus() }
+                        .addOnFailureListener { Toast.makeText(requireContext(), "Google account could not be verified: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() }
+                }
+            }
             .onFailure { Toast.makeText(requireContext(), "Google Drive was not connected", Toast.LENGTH_SHORT).show(); updateGoogleAccount() }
     }
     private val importFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -97,13 +109,8 @@ class SettingsFragment : Fragment() {
         }
         binding.googleDriveDisconnectButton.setOnClickListener { confirmDisconnect() }
         binding.createSharedLibraryButton.setOnClickListener { createSharedLibrary() }
-        binding.joinSharedLibraryButton.setOnClickListener { chooseSharedLibraryFile() }
-        binding.sharedAutoSyncSwitch.setOnCheckedChangeListener { _, enabled ->
-            if (GoogleDriveBackup.isSharedLibraryConfigured(requireContext())) {
-                GoogleDriveBackup.setSharedAutoSyncEnabled(requireContext(), enabled)
-                updateSharedLibraryStatus()
-            }
-        }
+        binding.joinSharedLibraryButton.setOnClickListener { showJoinSharedLibraryDialog() }
+        binding.sharedAutoSyncSwitch.setOnCheckedChangeListener { _, _ -> }
         binding.sharedSyncButton.setOnClickListener { syncSharedLibrary() }
         binding.sharedInviteButton.setOnClickListener { showInviteDialog() }
         binding.sharedMembersButton.setOnClickListener { showSharedMembers() }
@@ -345,18 +352,18 @@ class SettingsFragment : Fragment() {
     }
 
     private fun createSharedLibrary() {
-        if (!GoogleDriveBackup.hasConnectedAccount(requireContext())) {
+        if (!FirebaseSharedLibrary.signedIn()) {
             Toast.makeText(requireContext(), "Sign in to a Google account at the top of Settings first", Toast.LENGTH_LONG).show()
             return
         }
         binding.createSharedLibraryButton.isEnabled = false
         viewLifecycleOwner.lifecycleScope.launch {
-            runCatching { GoogleDriveBackup.createSharedLibrary(requireContext()) }
-                .onSuccess { link ->
+            runCatching { FirebaseSharedLibrary.create(requireContext()) }
+                .onSuccess {
                     updateSharedLibraryStatus()
                     MaterialAlertDialogBuilder(requireContext())
                         .setTitle("Shared library created")
-                        .setMessage("Your shared library is ready. Use Share below to invite people by email or send the joining instructions.")
+                        .setMessage("Your live shared library is ready. Use Share to create a private invite code. Changes made by members will appear automatically.")
                         .setPositiveButton("Done", null)
                         .show()
                 }
@@ -366,67 +373,45 @@ class SettingsFragment : Fragment() {
     }
 
     private fun showJoinSharedLibraryDialog() {
-        chooseSharedLibraryFile()
-    }
-
-    private fun chooseSharedLibraryFile() {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Choose shared library")
-            .setMessage("Choose the DO NOT DELETE MAP ASSIST SHARE.csv file from Google Drive. The owner must first share it with you as an Editor.")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Choose file") { _, _ ->
-                sharedLibraryFile.launch(arrayOf("text/csv", "text/comma-separated-values", "application/vnd.ms-excel"))
-            }
-            .show()
-    }
-
-    private fun showInviteDialog() {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Share shared library")
-            .setItems(arrayOf("Invite by email", "Share link and instructions")) { _, choice ->
-                if (choice == 0) showEmailInviteDialog() else shareJoinInstructions()
-            }
-            .show()
-    }
-
-    private fun showEmailInviteDialog() {
-        val email = android.widget.EditText(requireContext()).apply {
-            hint = "Email address"
-            inputType = android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+        val code = android.widget.EditText(requireContext()).apply {
+            hint = "8-character invite code"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
         }
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Invite by email")
-            .setMessage("Map Assist will share the protected CSV as an Editor and send joining instructions.")
-            .setView(email)
+            .setTitle("Join shared library")
+            .setMessage("Enter the private invite code sent by the library host. Joining safely downloads the live library and keeps it in sync automatically.")
+            .setView(code)
             .setNegativeButton("Cancel", null)
-            .setPositiveButton("Invite") { _, _ ->
+            .setPositiveButton("Join") { _, _ ->
                 viewLifecycleOwner.lifecycleScope.launch {
-                    runCatching { GoogleDriveBackup.inviteToSharedLibrary(requireContext(), email.text.toString()) }
-                        .onSuccess { message ->
-                            Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
-                        }
-                        .onFailure { error -> Toast.makeText(requireContext(), "Could not invite member: ${error.message ?: "try again"}", Toast.LENGTH_LONG).show() }
+                    runCatching { FirebaseSharedLibrary.join(requireContext(), code.text.toString()) }
+                        .onSuccess { updateSharedLibraryStatus(); Toast.makeText(requireContext(), "Joined shared library", Toast.LENGTH_SHORT).show() }
+                        .onFailure { Toast.makeText(requireContext(), "Could not join: ${it.message ?: "check the invite code"}", Toast.LENGTH_LONG).show() }
                 }
             }
             .show()
     }
 
-    private fun shareJoinInstructions() {
-        val link = GoogleDriveBackup.sharedLibraryLink(requireContext()).orEmpty()
-        val message = "Join my Map Assist shared library.\n\n1. Ask the host to share the file with you as an Editor.\n2. In Map Assist, open Settings → Shared library → Join.\n3. Choose DO NOT DELETE MAP ASSIST SHARE.csv from Google Drive.\n\nGoogle Drive link: $link"
-        startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(android.content.Intent.EXTRA_TEXT, message)
-        }, "Share Map Assist library"))
+    private fun showInviteDialog() {
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { FirebaseSharedLibrary.createInvite(requireContext()) }
+                .onSuccess { code ->
+                    val message = "Join my Map Assist shared library.\n\nOpen Settings → Shared library → Join, then enter this private invite code:\n\n$code"
+                    startActivity(android.content.Intent.createChooser(android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"; putExtra(android.content.Intent.EXTRA_TEXT, message)
+                    }, "Share Map Assist invite"))
+                }
+                .onFailure { Toast.makeText(requireContext(), "Could not create invite: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() }
+        }
     }
 
     private fun showSharedMembers() {
         binding.sharedMembersButton.isEnabled = false
         viewLifecycleOwner.lifecycleScope.launch {
-            runCatching { GoogleDriveBackup.sharedLibraryMembers(requireContext()) }
+            runCatching { FirebaseSharedLibrary.members(requireContext()) }
                 .onSuccess { members ->
                     val text = if (members.isEmpty()) "No individual members are listed. The library may be shared through a link or group." else members.joinToString("\n\n") { member ->
-                        "${member.name}\n${member.email.ifBlank { "Link or group access" }} · ${member.role}"
+                        "${member.name}\n${member.email.ifBlank { "Google account" }} · ${member.role}"
                     }
                     MaterialAlertDialogBuilder(requireContext()).setTitle("Library members").setMessage(text).setPositiveButton("Close", null).show()
                 }
@@ -483,11 +468,8 @@ class SettingsFragment : Fragment() {
         binding.sharedSyncButton.isEnabled = false
         binding.sharedSyncButton.text = "Syncing…"
         viewLifecycleOwner.lifecycleScope.launch {
-            runCatching { GoogleDriveBackup.syncSharedLibrary(requireContext()) }
-                .onSuccess { result ->
-                    if (result == "Shared library needs attention") showSharedConflict()
-                    else Toast.makeText(requireContext(), result, Toast.LENGTH_SHORT).show()
-                }
+            runCatching { FirebaseSharedLibrary.syncAll(requireContext()) }
+                .onSuccess { Toast.makeText(requireContext(), "Shared library updated", Toast.LENGTH_SHORT).show() }
                 .onFailure { Toast.makeText(requireContext(), "Shared library sync failed: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() }
             if (_binding != null) { binding.sharedSyncButton.isEnabled = true; updateSharedLibraryStatus() }
         }
@@ -532,17 +514,17 @@ class SettingsFragment : Fragment() {
     private fun confirmLeaveSharedLibrary() {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Leave shared library?")
-            .setMessage("This only disconnects this device. The shared data in Google Drive will not be deleted.")
+            .setMessage("This only disconnects this device. The shared library and other members will not be affected.")
             .setNegativeButton("Cancel", null)
-            .setPositiveButton("Leave") { _, _ -> GoogleDriveBackup.disconnectSharedLibrary(requireContext()); updateSharedLibraryStatus() }
+            .setPositiveButton("Leave") { _, _ -> FirebaseSharedLibrary.leave(requireContext()); updateSharedLibraryStatus() }
             .show()
     }
 
     private fun updateSharedLibraryStatus() {
         if (_binding == null) return
-        val configured = GoogleDriveBackup.isSharedLibraryConfigured(requireContext())
+        val configured = FirebaseSharedLibrary.isConfigured(requireContext())
         val preferences = requireContext().getSharedPreferences("map_assist", 0)
-        val isHost = configured && GoogleDriveBackup.isSharedLibraryHost(requireContext())
+        val isHost = configured && FirebaseSharedLibrary.isHost(requireContext())
         binding.sharedLibraryRoleBadge.visibility = if (configured) View.VISIBLE else View.GONE
         binding.sharedLibraryDetails.visibility = if (configured) View.VISIBLE else View.GONE
         if (configured) {
@@ -555,45 +537,30 @@ class SettingsFragment : Fragment() {
                 if (isHost) AccentPreferences.control(requireContext()) else ContextCompat.getColor(requireContext(), R.color.on_surface_variant)
             )
         }
-        binding.sharedAutoSyncSwitch.setOnCheckedChangeListener(null)
-        binding.sharedAutoSyncSwitch.isChecked = GoogleDriveBackup.isSharedAutoSyncEnabled(requireContext())
-        binding.sharedAutoSyncSwitch.isEnabled = configured
-        binding.sharedAutoSyncSwitch.setOnCheckedChangeListener { _, enabled ->
-            if (configured) {
-                GoogleDriveBackup.setSharedAutoSyncEnabled(requireContext(), enabled)
-                updateSharedLibraryStatus()
-            }
-        }
+        binding.sharedAutoSyncSwitch.visibility = View.GONE
         binding.sharedSyncButton.visibility = if (configured) View.VISIBLE else View.GONE
         binding.sharedSyncButton.text = "Sync shared library"
         binding.disconnectSharedLibraryButton.visibility = if (configured) View.VISIBLE else View.GONE
         binding.sharedHostActions.visibility = if (configured && isHost) View.VISIBLE else View.GONE
-        binding.sharedTransferHelpButton.visibility = if (configured && isHost) View.VISIBLE else View.GONE
-        val missing = preferences.getString("shared_library_state", "") == "missing"
-        val canReplaceMissing = missing && isHost
-        binding.createSharedLibraryButton.visibility = if (!configured || canReplaceMissing) View.VISIBLE else View.GONE
-        binding.createSharedLibraryButton.text = if (missing) "Replace shared library" else "Create shared library"
-        binding.joinSharedLibraryButton.visibility = if (!configured || missing) View.VISIBLE else View.GONE
+        binding.sharedTransferHelpButton.visibility = View.GONE
+        binding.createSharedLibraryButton.visibility = if (!configured) View.VISIBLE else View.GONE
+        binding.createSharedLibraryButton.text = "Create shared library"
+        binding.joinSharedLibraryButton.visibility = if (!configured) View.VISIBLE else View.GONE
         binding.sharedLibraryStatus.text = when {
-            !configured && !GoogleDriveBackup.hasConnectedAccount(requireContext()) -> "Sign in to a Google account above to create a library, or choose a shared file from Google Drive to join one."
-            !configured -> "Create a shared library, or join one that its owner has shared with your Google account."
-            missing && isHost -> "The shared CSV is missing from Google Drive. Create a replacement library, then share its new link with the other people."
-            missing -> "The shared CSV is no longer available. Ask the host to create a replacement, then choose that file to rejoin."
-            preferences.getString("shared_library_state", "") == "conflict" -> "Changes were made on more than one device. Sync needs your attention."
-            GoogleDriveBackup.isSharedAutoSyncEnabled(requireContext()) -> "Automatic sync is on. Last synced ${formatLastSync(preferences.getLong("shared_library_last_sync", 0L))}."
-            else -> "Automatic sync is off. Use Sync shared library to send changes manually."
+            !configured && !FirebaseSharedLibrary.signedIn() -> "Sign in with Google to create or join a live shared library."
+            !configured -> "Create a library or join one with a private invite code."
+            FirebaseSharedLibrary.state(requireContext()) == "failed" -> "Live sync needs attention. Check your connection, then use Sync shared library."
+            else -> "Live sync is on. Changes appear automatically for library members."
         }
         updateSharedSyncAttention()
         settleSwitchAnimations()
     }
 
     private fun updateSharedSyncAttention() {
-        val state = GoogleDriveBackup.sharedSyncState(requireContext())
+        val state = FirebaseSharedLibrary.state(requireContext())
         val message = when (state) {
             "pending" -> "Shared library sync is pending. Your changes will be sent when a connection is available."
             "failed" -> "Shared library sync failed. Check your connection and use Sync shared library below to try again."
-            "conflict" -> "Shared library needs attention. Changes were made on more than one device; choose which version to keep below."
-            "missing" -> "The shared library file was deleted from Google Drive. Create a replacement library or join the correct shared file below."
             else -> null
         }
         binding.sharedSyncAttentionCard.visibility = if (message == null) View.GONE else View.VISIBLE

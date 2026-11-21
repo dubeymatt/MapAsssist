@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.ksp)
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -13,8 +14,8 @@ android {
         targetSdk = 35
         // Keep this value in step with each distributed build; the Settings
         // screen reads it directly from BuildConfig.
-        versionCode = 104
-        versionName = "0.9.14"
+        versionCode = 105
+        versionName = "0.9.15"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -66,6 +67,12 @@ dependencies {
     implementation(libs.google.play.services.auth)
     implementation(libs.material)
     implementation("androidx.cardview:cardview:1.0.0")
+    // The project currently uses Kotlin 2.1; this stable BoM line is binary
+    // compatible with it (newer Firebase Auth releases require Kotlin 2.3).
+    implementation(platform("com.google.firebase:firebase-bom:33.9.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
     // Room
     implementation(libs.androidx.room.runtime)
