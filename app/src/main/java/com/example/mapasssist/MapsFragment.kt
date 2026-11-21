@@ -58,7 +58,7 @@ class MapsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         sortNumerically = requireContext()
             .getSharedPreferences("map_assist", 0)
-            .getBoolean("maps_sort_numerically", false)
+            .getBoolean("maps_sort_numerically", true)
         adapter = MapSlotAdapter(
             { slot -> openMap(slot) },
             { slot -> shareMap(slot) },

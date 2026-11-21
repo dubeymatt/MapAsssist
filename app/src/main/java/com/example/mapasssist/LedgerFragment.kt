@@ -46,7 +46,7 @@ class LedgerFragment : Fragment() {
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        sortMode = requireContext().getSharedPreferences("map_assist", 0).getInt("ledger_sort_mode", 0)
+        sortMode = requireContext().getSharedPreferences("map_assist", 0).getInt("ledger_sort_mode", 1)
         hiddenGroups = requireContext().getSharedPreferences("map_assist", 0)
             .getStringSet("ledger_hidden_groups", emptySet())
             ?.toSet()
@@ -102,6 +102,35 @@ class LedgerFragment : Fragment() {
                 MapGroupAccent.groupKey(card.mapNo) !in hiddenGroups
         }, assignments, expanded)
         root?.findViewById<View>(R.id.ledger_empty)?.visibility = if (cards.isEmpty()) View.VISIBLE else View.GONE
+        revealRequestedCard()
+    }
+
+    private fun revealRequestedCard() {
+        val preferences = requireContext().getSharedPreferences("map_assist", 0)
+        val mapNo = preferences.getString("ledger_focus_map", null)?.trim().orEmpty()
+        if (mapNo.isBlank() || cards.none { it.mapNo.equals(mapNo, ignoreCase = true) }) return
+        preferences.edit().remove("ledger_focus_map").apply()
+        val group = MapGroupAccent.groupKey(mapNo)
+        if (group in hiddenGroups || searchQuery.isNotBlank()) {
+            hiddenGroups = hiddenGroups - group
+            searchQuery = ""
+            preferences.edit().putStringSet("ledger_hidden_groups", hiddenGroups).apply()
+            groupFilterSignature = null
+            root?.post { ledgerAdapter?.let(::render) }
+            return
+        }
+        if (mapNo !in expanded) {
+            expanded = expanded + mapNo
+            root?.post { ledgerAdapter?.let(::render) }
+        }
+        val recycler = root?.findViewById<RecyclerView>(R.id.ledger_recycler) ?: return
+        recycler.post {
+            val position = ledgerAdapter?.positionOf(mapNo) ?: -1
+            if (position >= 0) {
+                (recycler.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(position, dp(8))
+                    ?: recycler.scrollToPosition(position)
+            }
+        }
     }
 
     private fun cardsForLedger(assignments: List<LedgerAssignment>): List<TextFile> {
@@ -531,6 +560,7 @@ private class LedgerAdapter(
             notifyDataSetChanged()
         }
     }
+    fun positionOf(mapNo: String) = cards.indexOfFirst { it.mapNo.equals(mapNo, ignoreCase = true) }
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = Holder(LayoutInflater.from(parent.context).inflate(R.layout.ledger_item, parent, false))
     override fun getItemCount() = cards.size
     override fun onBindViewHolder(holder: Holder, position: Int) {

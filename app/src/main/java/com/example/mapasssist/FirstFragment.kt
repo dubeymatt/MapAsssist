@@ -51,7 +51,7 @@ class FirstFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         val preferences = requireContext().getSharedPreferences("map_assist", 0)
-        when (preferences.getInt("sort_mode", 1)) { 2 -> sortAlphabetically = true; 3 -> sortNumerically = true }
+        when (preferences.getInt("sort_mode", 3)) { 2 -> sortAlphabetically = true; 3 -> sortNumerically = true }
         lateinit var adapter: TextFileListAdapter
         adapter = TextFileListAdapter({ textFile ->
             val bundle = Bundle().apply {

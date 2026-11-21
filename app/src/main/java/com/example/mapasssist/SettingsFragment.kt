@@ -63,15 +63,13 @@ class SettingsFragment : Fragment() {
         uri ?: return@registerForActivityResult
         val imported = runCatching { readCsv(uri) }.getOrElse { Toast.makeText(requireContext(), "Could not read this spreadsheet. Export a fresh Map Assist spreadsheet and use that as the template.", Toast.LENGTH_LONG).show(); return@registerForActivityResult }
         MaterialAlertDialogBuilder(requireContext()).setTitle("Import will permanently replace all data").setMessage("This will delete all ${files.size} saved DNC cards and replace them with ${imported.files.size} cards from the spreadsheet. This cannot be undone.")
-            .setNegativeButton("Cancel", null).setPositiveButton("Replace all data") { _, _ -> viewModel.replaceAll(imported.files); LedgerStore.replace(requireContext(), imported.assignments); Toast.makeText(requireContext(), "DNCs and ledger replaced", Toast.LENGTH_SHORT).show() }.show()
-    }
-    private val sharedLibraryFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri ?: return@registerForActivityResult
-        viewLifecycleOwner.lifecycleScope.launch {
-            runCatching { GoogleDriveBackup.connectSharedLibraryDocument(requireContext(), uri) }
-                .onSuccess(::showSharedLibraryChoice)
-                .onFailure { error -> Toast.makeText(requireContext(), "Could not join shared library: ${error.message ?: "choose the shared CSV from Google Drive"}", Toast.LENGTH_LONG).show() }
-        }
+            .setNegativeButton("Cancel", null).setPositiveButton("Replace all data") { _, _ ->
+                viewModel.restoreBackupLocally(imported.files) {
+                    LedgerStore.replace(requireContext(), imported.assignments, notifySharedSync = false)
+                    Toast.makeText(requireContext(), "DNCs and ledger restored", Toast.LENGTH_SHORT).show()
+                    promptToSyncRestoredData()
+                }
+            }.show()
     }
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View { _binding = FragmentSettingsBinding.inflate(inflater, container, false); return binding.root }
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -107,6 +105,7 @@ class SettingsFragment : Fragment() {
             } else if (GoogleDriveBackup.isSyncConfigured(requireContext())) confirmDriveSync()
             else reconcileGoogleDriveBackup()
         }
+        binding.googleDriveRestoreButton.setOnClickListener { restoreFromDrive() }
         binding.googleDriveDisconnectButton.setOnClickListener { confirmDisconnect() }
         binding.createSharedLibraryButton.setOnClickListener { createSharedLibrary() }
         binding.joinSharedLibraryButton.setOnClickListener { showJoinSharedLibraryDialog() }
@@ -273,9 +272,42 @@ class SettingsFragment : Fragment() {
         binding.googleDriveSyncButton.text = "Restoring…"
         viewLifecycleOwner.lifecycleScope.launch {
             runCatching { GoogleDriveBackup.restore(requireContext(), backup) }
-                .onSuccess { Toast.makeText(requireContext(), it, Toast.LENGTH_SHORT).show() }
+                .onSuccess {
+                    Toast.makeText(requireContext(), it, Toast.LENGTH_SHORT).show()
+                    promptToSyncRestoredData()
+                }
                 .onFailure { Toast.makeText(requireContext(), "Could not restore backup: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() }
             if (_binding != null) { binding.googleDriveSyncButton.isEnabled = true; updateDriveStatus() }
+        }
+    }
+
+    private fun promptToSyncRestoredData() {
+        if (!FirebaseSharedLibrary.isConfigured(requireContext())) return
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Sync restored data to shared library?")
+            .setMessage("The backup has been restored on this device. Syncing now will replace the shared DNC cards and Ledger data for everyone in this library with the restored version.")
+            .setNegativeButton("Not now", null)
+            .setPositiveButton("Sync shared library") { _, _ ->
+                viewLifecycleOwner.lifecycleScope.launch {
+                    runCatching { FirebaseSharedLibrary.syncAll(requireContext()) }
+                        .onSuccess { Toast.makeText(requireContext(), "Restored data synced to the shared library", Toast.LENGTH_SHORT).show() }
+                        .onFailure { Toast.makeText(requireContext(), "Could not sync restored data: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() }
+                }
+            }
+            .show()
+    }
+
+    private fun restoreFromDrive() {
+        if (!GoogleDriveBackup.hasConnectedAccount(requireContext())) { Toast.makeText(requireContext(), "Sign in to a Google account first", Toast.LENGTH_SHORT).show(); return }
+        viewLifecycleOwner.lifecycleScope.launch {
+            runCatching { GoogleDriveBackup.findExistingBackup(requireContext()) }
+                .onSuccess { backup ->
+                    if (backup == null) Toast.makeText(requireContext(), "No Google Drive backup was found", Toast.LENGTH_LONG).show()
+                    else MaterialAlertDialogBuilder(requireContext()).setTitle("Restore Google Drive backup?")
+                        .setMessage("This replaces this device’s DNC cards and Ledger data with the backup from ${formatLastSync(backup.modifiedTime)}.")
+                        .setNegativeButton("Cancel", null).setPositiveButton("Restore") { _, _ -> restoreDriveBackup(backup) }.show()
+                }
+                .onFailure { Toast.makeText(requireContext(), "Could not find a backup: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() }
         }
     }
 
@@ -293,6 +325,7 @@ class SettingsFragment : Fragment() {
         val preferences = requireContext().getSharedPreferences("map_assist", 0)
         val connected = GoogleDriveBackup.hasConnectedAccount(requireContext())
         binding.googleDriveSyncButton.isEnabled = connected
+        binding.googleDriveRestoreButton.isEnabled = connected
         binding.googleDriveSyncButton.text = "Sync now to Google Drive"
         binding.googleDriveStatus.text = when {
             !connected -> "Sign in above to create or restore a Google Drive backup."
@@ -368,7 +401,7 @@ class SettingsFragment : Fragment() {
                         .setPositiveButton("Done", null)
                         .show()
                 }
-                .onFailure { Toast.makeText(requireContext(), "Could not create shared library: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() }
+                .onFailure { Toast.makeText(requireContext(), "Could not create shared library: ${it.message ?: "check Firebase rules and try again"}", Toast.LENGTH_LONG).show() }
             if (_binding != null) { binding.createSharedLibraryButton.isEnabled = true; binding.createSharedLibraryButton.text = "Create" }
         }
     }
@@ -445,9 +478,9 @@ class SettingsFragment : Fragment() {
             runCatching { FirebaseSharedLibrary.members(requireContext()).filter { it.role != "Host" } }
                 .onSuccess { members ->
                     MaterialAlertDialogBuilder(requireContext()).setTitle("Manage shared library")
-                        .setMessage("Before leaving, transfer the host role to a current member or permanently delete this shared library for everyone.")
+                        .setMessage("Before leaving, transfer the host role to a current member or end live syncing for everyone. Ending keeps the current data on every device.")
                         .setNegativeButton("Cancel", null)
-                        .setNeutralButton("Delete library") { _, _ -> confirmDeleteLibrary() }
+                        .setNeutralButton("End library") { _, _ -> confirmDeleteLibrary() }
                         .setPositiveButton("Transfer host") { _, _ -> chooseNewHost(members) }.show()
                 }
                 .onFailure { Toast.makeText(requireContext(), "Could not load members", Toast.LENGTH_LONG).show() }
@@ -460,7 +493,7 @@ class SettingsFragment : Fragment() {
             .setItems(members.map { it.name }.toTypedArray()) { _, index ->
                 val member = members[index]
                 MaterialAlertDialogBuilder(requireContext()).setTitle("Transfer host role?")
-                    .setMessage("${member.name} will manage members and can delete the library. You will remain a member.")
+                    .setMessage("${member.name} will manage members and can end the shared library. You will remain a member.")
                     .setNegativeButton("Cancel", null).setPositiveButton("Transfer") { _, _ ->
                         viewLifecycleOwner.lifecycleScope.launch { runCatching { FirebaseSharedLibrary.transferHost(requireContext(), member) }
                             .onSuccess { updateSharedLibraryStatus(); Toast.makeText(requireContext(), "Host role transferred", Toast.LENGTH_SHORT).show() }
@@ -470,49 +503,13 @@ class SettingsFragment : Fragment() {
     }
 
     private fun confirmDeleteLibrary() {
-        MaterialAlertDialogBuilder(requireContext()).setTitle("Delete shared library?")
-            .setMessage("This permanently removes the live shared library for every member. Their local data stays on their own devices. Export a backup first if you are unsure.")
-            .setNegativeButton("Cancel", null).setPositiveButton("Delete for everyone") { _, _ ->
-                viewLifecycleOwner.lifecycleScope.launch { runCatching { FirebaseSharedLibrary.deleteLibrary(requireContext()) }
-                    .onSuccess { updateSharedLibraryStatus(); Toast.makeText(requireContext(), "Shared library deleted", Toast.LENGTH_SHORT).show() }
-                    .onFailure { Toast.makeText(requireContext(), "Could not delete library: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() } }
+        MaterialAlertDialogBuilder(requireContext()).setTitle("End shared library?")
+            .setMessage("This disconnects every member and ends live syncing. Everyone keeps the current DNC and Ledger data on their own device.")
+            .setNegativeButton("Cancel", null).setPositiveButton("End for everyone") { _, _ ->
+                viewLifecycleOwner.lifecycleScope.launch { runCatching { FirebaseSharedLibrary.endLibrary(requireContext()) }
+                    .onSuccess { updateSharedLibraryStatus(); Toast.makeText(requireContext(), "Shared library ended", Toast.LENGTH_SHORT).show() }
+                    .onFailure { Toast.makeText(requireContext(), "Could not end library: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() } }
             }.show()
-    }
-
-    private fun showSharedLibraryChoice(remote: GoogleDriveBackup.RemoteBackup) {
-        val timestamp = formatLastSync(remote.modifiedTime)
-        var joining = true
-        val dialog = MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Download shared library to join")
-            .setMessage("The owner’s shared library was last updated $timestamp.\n\nTo join, Map Assist will download that library and permanently replace the DNC cards and Ledger data currently on this device. The shared library will not be changed.\n\nIf you want to keep this device’s local data, cancel and export a local backup first.")
-            .setNegativeButton("Cancel joining") { _, _ -> cancelPendingSharedJoin() }
-            .setPositiveButton("Download and join") { _, _ ->
-                joining = false
-                downloadSharedLibrary(remote, enableAutoSync = true)
-            }
-            .create()
-        dialog.setOnCancelListener {
-            if (joining) cancelPendingSharedJoin()
-        }
-        dialog.show()
-    }
-
-    private fun cancelPendingSharedJoin() {
-        GoogleDriveBackup.disconnectSharedLibrary(requireContext())
-        updateSharedLibraryStatus()
-    }
-
-    private fun confirmSharedOverwrite(enableAutoSync: Boolean = false) {
-        if (!GoogleDriveBackup.isSharedLibraryHost(requireContext())) {
-            Toast.makeText(requireContext(), "Only the host can replace the shared library", Toast.LENGTH_LONG).show()
-            return
-        }
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Replace shared library?")
-            .setMessage("This will replace the shared library for every person using it. Export a local backup first if you are unsure.")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Replace shared library") { _, _ -> uploadSharedLibrary(enableAutoSync) }
-            .show()
     }
 
     private fun syncSharedLibrary() {
@@ -526,43 +523,19 @@ class SettingsFragment : Fragment() {
         }
     }
 
-    private fun uploadSharedLibrary(enableAutoSync: Boolean = false) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            runCatching { GoogleDriveBackup.uploadSharedLibrary(requireContext()) }
-                .onSuccess {
-                    if (enableAutoSync) GoogleDriveBackup.setSharedAutoSyncEnabled(requireContext(), true)
-                    Toast.makeText(requireContext(), it, Toast.LENGTH_SHORT).show()
-                    updateSharedLibraryStatus()
-                }
-                .onFailure { Toast.makeText(requireContext(), "Could not update shared library: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() }
-        }
-    }
-
-    private fun downloadSharedLibrary(remote: GoogleDriveBackup.RemoteBackup? = null, enableAutoSync: Boolean = false) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            runCatching { GoogleDriveBackup.restoreSharedLibrary(requireContext(), remote) }
-                .onSuccess {
-                    if (enableAutoSync) GoogleDriveBackup.setSharedAutoSyncEnabled(requireContext(), true)
-                    Toast.makeText(requireContext(), it, Toast.LENGTH_SHORT).show()
-                    updateSharedLibraryStatus()
-                }
-                .onFailure { Toast.makeText(requireContext(), "Could not download shared library: ${it.message ?: "try again"}", Toast.LENGTH_LONG).show() }
-        }
-    }
-
-    private fun showSharedConflict() {
-        val dialog = MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Shared library needs attention")
-            .setMessage("Both this device and the shared library changed since the last sync. Choose one version to keep. Export a local backup first if you are unsure.")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Download shared library") { _, _ -> downloadSharedLibrary() }
-        if (GoogleDriveBackup.isSharedLibraryHost(requireContext())) {
-            dialog.setNeutralButton("Replace shared library") { _, _ -> confirmSharedOverwrite() }
-        }
-        dialog.show()
-    }
-
     private fun confirmLeaveSharedLibrary() {
+        if (FirebaseSharedLibrary.state(requireContext()) == "failed") {
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Disconnect failed library?")
+                .setMessage("This removes the broken shared-library connection from this device. Your DNC cards and Ledger data stay on this device.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Disconnect") { _, _ ->
+                    FirebaseSharedLibrary.leave(requireContext())
+                    updateSharedLibraryStatus()
+                }
+                .show()
+            return
+        }
         if (FirebaseSharedLibrary.isHost(requireContext())) { showHostTransferHelp(); return }
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("Leave shared library?")
@@ -592,7 +565,9 @@ class SettingsFragment : Fragment() {
         binding.sharedAutoSyncSwitch.visibility = View.GONE
         binding.sharedSyncButton.visibility = if (configured) View.VISIBLE else View.GONE
         binding.sharedSyncButton.text = "Sync shared library"
-        binding.disconnectSharedLibraryButton.visibility = if (configured) View.VISIBLE else View.GONE
+        val failed = FirebaseSharedLibrary.state(requireContext()) == "failed"
+        binding.disconnectSharedLibraryButton.visibility = if (configured && (!isHost || failed)) View.VISIBLE else View.GONE
+        binding.disconnectSharedLibraryButton.text = if (failed) "Disconnect failed library" else "Leave shared library"
         binding.sharedHostActions.visibility = if (configured) View.VISIBLE else View.GONE
         binding.sharedInviteButton.visibility = if (isHost) View.VISIBLE else View.GONE
         binding.sharedMembersButton.visibility = if (configured) View.VISIBLE else View.GONE
@@ -605,6 +580,7 @@ class SettingsFragment : Fragment() {
             !configured && !FirebaseSharedLibrary.signedIn() -> "Sign in with Google to create or join a live shared library."
             !configured -> "Create a library or join one with a private invite code."
             FirebaseSharedLibrary.state(requireContext()) == "removed" -> "You were removed from this shared library. Your local data has not been deleted."
+            FirebaseSharedLibrary.state(requireContext()) == "ended" -> "This shared library has ended. Your local data remains on this device."
             FirebaseSharedLibrary.state(requireContext()) == "failed" -> "Live sync needs attention. Check your connection, then use Sync shared library."
             else -> "Live sync is on. Changes appear automatically for library members."
         }
@@ -618,6 +594,7 @@ class SettingsFragment : Fragment() {
             "pending" -> "Shared library sync is pending. Your changes will be sent when a connection is available."
             "failed" -> "Shared library sync failed. Check your connection and use Sync shared library below to try again."
             "removed" -> "You no longer have access to this shared library. Your saved local data remains on this device."
+            "ended" -> "This shared library has ended. Your saved local data remains on this device."
             else -> null
         }
         binding.sharedSyncAttentionCard.visibility = if (message == null) View.GONE else View.VISIBLE
@@ -664,6 +641,7 @@ class SettingsFragment : Fragment() {
         outlined(binding.joinSharedLibraryButton)
         outlined(binding.sharedInviteButton)
         outlined(binding.sharedMembersButton)
+        outlined(binding.googleDriveRestoreButton)
         binding.openDownloadsButton.setTextColor(accent)
         binding.openDownloadsButton.iconTint = android.content.res.ColorStateList.valueOf(accent)
         binding.openDriveButton.setTextColor(accent)

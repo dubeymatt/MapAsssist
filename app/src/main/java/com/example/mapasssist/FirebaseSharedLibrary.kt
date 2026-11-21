@@ -30,6 +30,9 @@ object FirebaseSharedLibrary {
     private const val INVITE_CODE = "firebase_shared_invite_code"
     private const val ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     private var listeners = mutableListOf<ListenerRegistration>()
+    private val syncStateLock = Any()
+    private var activeSyncOperations = 0
+    private var queuedFullSync = false
 
     data class Member(val id: String, val name: String, val email: String, val role: String)
 
@@ -50,11 +53,38 @@ object FirebaseSharedLibrary {
         setState(context, "syncing")
         val id = UUID.randomUUID().toString()
         val root = db().collection("map_assist_libraries").document(id)
-        root.set(mapOf("hostUid" to owner.uid, "createdAt" to System.currentTimeMillis(), "updatedAt" to System.currentTimeMillis())).await()
-        root.collection("members").document(owner.uid).set(memberMap(owner.displayName, owner.email, "Host")).await()
+        val now = System.currentTimeMillis()
+        root.set(mapOf(
+            "hostUid" to owner.uid,
+            "closed" to false,
+            "createdAt" to now,
+            "updatedAt" to now
+        )).await()
+        try {
+            root.collection("members").document(owner.uid).set(memberMap(owner.displayName, owner.email, "Host")).await()
+        } catch (error: Exception) {
+            // Do not leave this device believing it joined a library when its
+            // membership write was rejected.
+            setState(context, "failed")
+            throw error
+        }
         prefs(context).edit().putString(LIBRARY_ID, id).putString(ROLE, "host").apply()
-        syncAll(context)
-        start(context)
+        try {
+            // Verify the same permissions that a normal library uses before
+            // showing it as created.  This prevents a partially configured
+            // library from appearing usable after a rejected first upload.
+            syncAll(context)
+            start(context)
+        } catch (error: Exception) {
+            stop()
+            prefs(context).edit()
+                .remove(LIBRARY_ID)
+                .remove(ROLE)
+                .remove(INVITE_CODE)
+                .putString(STATE, "failed")
+                .apply()
+            throw error
+        }
         return id
     }
 
@@ -85,31 +115,64 @@ object FirebaseSharedLibrary {
     }.sortedBy { it.name.lowercase() }
 
     suspend fun removeMember(context: Context, member: Member) {
-        check(isHost(context)) { "Only the host can remove members" }
-        check(member.id != uid()) { "The host cannot remove themselves" }
-        library(context).collection("activity").add(mapOf("time" to System.currentTimeMillis(), "person" to FirebaseAuth.getInstance().currentUser?.displayName.orEmpty().ifBlank { "Host" }, "summary" to "Removed ${member.name} from the shared library")).await()
-        library(context).collection("members").document(member.id).delete().await()
+        val root = library(context)
+        val currentUser = uid()
+        check(member.id != currentUser) { "The host cannot remove themselves" }
+        val currentHost = root.collection("members").document(currentUser)
+        val target = root.collection("members").document(member.id)
+        val activity = root.collection("activity").document()
+        db().runTransaction { transaction ->
+            val hostRecord = transaction.get(currentHost)
+            check(hostRecord.exists() && hostRecord.getString("role") == "Host") {
+                "You are no longer the library host"
+            }
+            val targetRecord = transaction.get(target)
+            check(targetRecord.exists()) { "That member is no longer in the library" }
+            check(targetRecord.getString("role") != "Host") { "Transfer the host role before removing this member" }
+            transaction.set(activity, mapOf(
+                "time" to System.currentTimeMillis(),
+                "person" to FirebaseAuth.getInstance().currentUser?.displayName.orEmpty().ifBlank { "Host" },
+                "summary" to "Removed ${member.name} from the shared library"
+            ))
+            transaction.delete(target)
+        }.await()
     }
 
     suspend fun transferHost(context: Context, member: Member) {
-        check(isHost(context)) { "Only the host can transfer ownership" }
-        check(member.id != uid()) { "Choose another member" }
         val root = library(context)
-        root.set(mapOf("hostUid" to member.id, "updatedAt" to System.currentTimeMillis()), SetOptions.merge()).await()
-        root.collection("members").document(member.id).set(mapOf("role" to "Host"), SetOptions.merge()).await()
-        root.collection("members").document(uid()).set(mapOf("role" to "Member"), SetOptions.merge()).await()
-        root.collection("activity").add(mapOf("time" to System.currentTimeMillis(), "person" to "Host", "summary" to "Transferred host role to ${member.name}")).await()
-        prefs(context).edit().putString(ROLE, "member").apply()
+        val oldHost = uid()
+        check(member.id != oldHost) { "Choose another member" }
+        val newHost = root.collection("members").document(member.id)
+        val oldHostMember = root.collection("members").document(oldHost)
+        val activity = root.collection("activity").document()
+        db().runTransaction { transaction ->
+            val currentHost = transaction.get(oldHostMember)
+            check(currentHost.exists() && currentHost.getString("role") == "Host") {
+                "You are no longer the library host"
+            }
+            val newHostRecord = transaction.get(newHost)
+            check(newHostRecord.exists()) { "That member is no longer in the library" }
+            check(newHostRecord.getString("role") != "Host") { "That member is already the library host" }
+            transaction.update(root, mapOf("hostUid" to member.id, "updatedAt" to System.currentTimeMillis()))
+            transaction.update(newHost, "role", "Host")
+            transaction.update(oldHostMember, "role", "Member")
+            transaction.set(activity, mapOf("time" to System.currentTimeMillis(), "person" to "Host", "summary" to "Transferred host role to ${member.name}"))
+        }.await()
     }
 
-    suspend fun deleteLibrary(context: Context) {
-        check(isHost(context)) { "Only the host can delete the library" }
+    suspend fun endLibrary(context: Context) {
         val root = library(context)
-        suspend fun removeCollection(name: String) { root.collection(name).get().await().documents.forEach { it.reference.delete().await() } }
-        removeCollection("cards"); removeCollection("activity"); removeCollection("system")
-        root.collection("members").get().await().documents.filter { it.id != uid() }.forEach { it.reference.delete().await() }
-        root.delete().await()
-        root.collection("members").document(uid()).delete().await()
+        val host = uid()
+        val hostMember = root.collection("members").document(host)
+        val activity = root.collection("activity").document()
+        db().runTransaction { transaction ->
+            val currentHost = transaction.get(hostMember)
+            check(currentHost.exists() && currentHost.getString("role") == "Host") {
+                "You are no longer the library host"
+            }
+            transaction.update(root, mapOf("closed" to true, "updatedAt" to System.currentTimeMillis()))
+            transaction.set(activity, mapOf("time" to System.currentTimeMillis(), "person" to "Host", "summary" to "Ended the shared library"))
+        }.await()
         leave(context)
     }
 
@@ -122,12 +185,6 @@ object FirebaseSharedLibrary {
         val assignments = (ledger.get("assignments") as? List<*>)?.mapNotNull { (it as? Map<*, *>)?.let(::assignmentFrom) }.orEmpty()
         LedgerStore.replace(context, assignments, notifySharedSync = false)
         setState(context, "synced")
-    }
-
-    suspend fun clearActivity(context: Context) {
-        check(isHost(context)) { "Only the host can clear shared activity" }
-        library(context).collection("activity").get().await().documents.forEach { it.reference.delete().await() }
-        SharedActivityStore.replaceFromRemote(context, emptyList())
     }
 
     fun leave(context: Context) {
@@ -147,6 +204,9 @@ object FirebaseSharedLibrary {
             if (snapshot != null && !snapshot.exists()) {
                 stop()
                 prefs(context).edit().remove(LIBRARY_ID).remove(ROLE).remove(INVITE_CODE).putString(STATE, "removed").apply()
+            } else if (snapshot != null) {
+                val role = if (snapshot.getString("role") == "Host") "host" else "member"
+                prefs(context).edit().putString(ROLE, role).apply()
             }
         }
         listeners += root.collection("cards").addSnapshotListener { snapshot, error ->
@@ -166,7 +226,10 @@ object FirebaseSharedLibrary {
         }
         listeners += root.addSnapshotListener { snapshot, error ->
             if (error != null) { setState(context, "failed"); return@addSnapshotListener }
-            if (snapshot?.exists() == true) setState(context, "synced")
+            if (snapshot?.getBoolean("closed") == true) {
+                stop()
+                prefs(context).edit().remove(LIBRARY_ID).remove(ROLE).remove(INVITE_CODE).putString(STATE, "ended").apply()
+            } else if (snapshot?.exists() == true && !isSyncInProgress()) setState(context, "synced")
         }
     }
 
@@ -174,45 +237,98 @@ object FirebaseSharedLibrary {
 
     fun queueSync(context: Context) {
         if (!isConfigured(context) || prefs(context).getBoolean(APPLYING_REMOTE, false)) return
+        synchronized(syncStateLock) {
+            if (queuedFullSync) return
+            queuedFullSync = true
+        }
         setState(context, "pending")
         CoroutineScope(Dispatchers.IO).launch {
-            runCatching { syncAll(context); setState(context, "synced") }.onFailure { setState(context, "failed") }
+            runCatching { syncAll(context) }
+            synchronized(syncStateLock) { queuedFullSync = false }
         }
     }
 
     suspend fun publishCard(context: Context, card: TextFile) {
         if (!isConfigured(context)) return
-        library(context).collection("cards").document(cardId(card.mapNo)).set(cardMap(card), SetOptions.merge()).await()
-        setState(context, "synced")
+        withSyncFeedback(context) {
+            library(context).collection("cards").document(cardId(card.mapNo)).set(cardMap(card), SetOptions.merge()).await()
+        }
+    }
+
+    /** Keeps a map-number rename as one visible sync operation. */
+    suspend fun updateCard(context: Context, previousMapNo: String?, card: TextFile) {
+        if (!isConfigured(context)) return
+        withSyncFeedback(context) {
+            if (!previousMapNo.isNullOrBlank() && !previousMapNo.equals(card.mapNo, ignoreCase = true)) {
+                library(context).collection("cards").document(cardId(previousMapNo)).delete().await()
+            }
+            library(context).collection("cards").document(cardId(card.mapNo)).set(cardMap(card), SetOptions.merge()).await()
+        }
     }
 
     suspend fun deleteCard(context: Context, mapNo: String) {
         if (!isConfigured(context)) return
-        library(context).collection("cards").document(cardId(mapNo)).delete().await()
-        setState(context, "synced")
+        withSyncFeedback(context) {
+            library(context).collection("cards").document(cardId(mapNo)).delete().await()
+        }
     }
 
     suspend fun replaceCards(context: Context, cards: List<TextFile>) {
         if (!isConfigured(context)) return
-        val collection = library(context).collection("cards")
-        collection.get().await().documents.forEach { it.reference.delete().await() }
-        cards.forEach { collection.document(cardId(it.mapNo)).set(cardMap(it)).await() }
-        setState(context, "synced")
+        withSyncFeedback(context) {
+            val collection = library(context).collection("cards")
+            collection.get().await().documents.forEach { it.reference.delete().await() }
+            cards.forEach { collection.document(cardId(it.mapNo)).set(cardMap(it)).await() }
+        }
     }
 
     suspend fun syncAll(context: Context) {
         if (!isConfigured(context)) return
-        val root = library(context)
-        val cards = AppDatabase.getDatabase(context).textFileDao().getAllForBackup()
-        cards.forEach { card -> root.collection("cards").document(cardId(card.mapNo)).set(cardMap(card), SetOptions.merge()).await() }
-        root.collection("system").document("ledger").set(mapOf("assignments" to LedgerStore.read(context).map(::assignmentMap), "updatedAt" to System.currentTimeMillis()), SetOptions.merge()).await()
-        root.set(mapOf("updatedAt" to System.currentTimeMillis()), SetOptions.merge()).await()
+        withSyncFeedback(context) {
+            val root = library(context)
+            val cards = AppDatabase.getDatabase(context).textFileDao().getAllForBackup()
+            cards.forEach { card -> root.collection("cards").document(cardId(card.mapNo)).set(cardMap(card), SetOptions.merge()).await() }
+            root.collection("system").document("ledger").set(mapOf("assignments" to LedgerStore.read(context).map(::assignmentMap), "updatedAt" to System.currentTimeMillis()), SetOptions.merge()).await()
+            if (isHost(context)) root.set(mapOf("updatedAt" to System.currentTimeMillis()), SetOptions.merge()).await()
+        }
+    }
+
+    private fun isSyncInProgress(): Boolean = synchronized(syncStateLock) { activeSyncOperations > 0 }
+
+    private suspend fun <T> withSyncFeedback(context: Context, work: suspend () -> T): T {
+        synchronized(syncStateLock) { activeSyncOperations += 1 }
+        setState(context, "syncing")
+        return try {
+            work().also { finishSyncFeedback(context, successful = true) }
+        } catch (error: Throwable) {
+            finishSyncFeedback(context, successful = false)
+            throw error
+        }
+    }
+
+    private fun finishSyncFeedback(context: Context, successful: Boolean) {
+        val shouldShowSynced = synchronized(syncStateLock) {
+            activeSyncOperations = (activeSyncOperations - 1).coerceAtLeast(0)
+            successful && activeSyncOperations == 0
+        }
+        if (!isConfigured(context)) return
+        if (!successful) setState(context, "failed")
+        else if (shouldShowSynced) setState(context, "synced")
     }
 
     fun recordActivity(context: Context, entry: SharedActivity) {
         if (!isConfigured(context) || prefs(context).getBoolean(APPLYING_REMOTE, false)) return
         CoroutineScope(Dispatchers.IO).launch {
-            runCatching { library(context).collection("activity").add(mapOf("time" to entry.time, "person" to entry.person, "summary" to entry.summary)).await() }
+            runCatching {
+                library(context).collection("activity").add(mapOf(
+                    "time" to entry.time,
+                    "person" to entry.person,
+                    "summary" to entry.summary,
+                    "kind" to entry.kind,
+                    "mapNo" to entry.mapNo,
+                    "title" to entry.title
+                )).await()
+            }
         }
     }
 
@@ -233,6 +349,13 @@ object FirebaseSharedLibrary {
     }
     private fun activityFrom(doc: DocumentSnapshot): SharedActivity? {
         val time = doc.getLong("time") ?: return null
-        return SharedActivity(time, doc.getString("person").orEmpty(), doc.getString("summary").orEmpty())
+        return SharedActivity(
+            time = time,
+            person = doc.getString("person").orEmpty(),
+            summary = doc.getString("summary").orEmpty(),
+            kind = doc.getString("kind").orEmpty(),
+            mapNo = doc.getString("mapNo").orEmpty(),
+            title = doc.getString("title").orEmpty()
+        )
     }
 }

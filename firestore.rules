@@ -5,35 +5,56 @@ service cloud.firestore {
     function member(libraryId) {
       return signedIn() && exists(/databases/$(database)/documents/map_assist_libraries/$(libraryId)/members/$(request.auth.uid));
     }
-    function host(libraryId) {
-      return member(libraryId) && get(/databases/$(database)/documents/map_assist_libraries/$(libraryId)).data.hostUid == request.auth.uid;
-    }
     function owner(libraryId) {
       return signedIn() && get(/databases/$(database)/documents/map_assist_libraries/$(libraryId)).data.hostUid == request.auth.uid;
+    }
+    // Membership is authoritative after creation. This lets a transferred host
+    // manage the library even if an older client left a stale hostUid behind.
+    function host(libraryId) {
+      return signedIn() && exists(/databases/$(database)/documents/map_assist_libraries/$(libraryId)/members/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/map_assist_libraries/$(libraryId)/members/$(request.auth.uid)).data.role == 'Host';
+    }
+    function activeMember(libraryId) {
+      return member(libraryId) && libraryIsOpen(libraryId);
+    }
+    // Older libraries were created before the closed field existed. Treat
+    // those as open, while still preventing writes once a library is ended.
+    function libraryIsOpen(libraryId) {
+      let library = get(/databases/$(database)/documents/map_assist_libraries/$(libraryId));
+      return !library.data.keys().hasAll(['closed']) || library.data.closed == false;
     }
     function validInvite(libraryId, inviteCode) {
       return exists(/databases/$(database)/documents/map_assist_invites/$(inviteCode)) &&
         get(/databases/$(database)/documents/map_assist_invites/$(inviteCode)).data.libraryId == libraryId;
+    }
+    function joinableInvite(libraryId, inviteCode) {
+      return validInvite(libraryId, inviteCode) &&
+        libraryIsOpen(libraryId);
     }
 
     match /map_assist_libraries/{libraryId} {
       allow create: if signedIn() && request.resource.data.hostUid == request.auth.uid;
       allow read: if member(libraryId);
       allow update: if host(libraryId);
-      allow delete: if host(libraryId);
+      // Libraries are ended by marking them closed.  Never permanently delete
+      // the document: existing devices need to receive that final state and
+      // keep their local data.
+      allow delete: if false;
 
       match /members/{userId} {
         allow read: if member(libraryId);
         // The owner needs to create their own first membership document before
         // they can satisfy member()/host().
         allow create: if owner(libraryId) ||
-          (signedIn() && userId == request.auth.uid && validInvite(libraryId, request.resource.data.inviteCode));
-        allow update: if host(libraryId) || userId == request.auth.uid;
+          (signedIn() && userId == request.auth.uid && joinableInvite(libraryId, request.resource.data.inviteCode));
+        // A member must never be able to promote themselves by changing their
+        // own role.  Host transfers are performed atomically by the host.
+        allow update: if host(libraryId);
         allow delete: if host(libraryId) || userId == request.auth.uid;
       }
-      match /cards/{cardId} { allow read, write: if member(libraryId); }
-      match /activity/{activityId} { allow read, create: if member(libraryId); allow update: if false; allow delete: if host(libraryId); }
-      match /system/{documentId} { allow read, write: if member(libraryId); }
+      match /cards/{cardId} { allow read, write: if activeMember(libraryId); }
+      match /activity/{activityId} { allow read: if member(libraryId); allow create: if activeMember(libraryId); allow update: if false; allow delete: if host(libraryId); }
+      match /system/{documentId} { allow read, write: if activeMember(libraryId); }
     }
     match /map_assist_invites/{code} {
       allow get: if signedIn();

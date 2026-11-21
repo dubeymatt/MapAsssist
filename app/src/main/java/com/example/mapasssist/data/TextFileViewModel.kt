@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.*
 import com.example.mapasssist.FirebaseSharedLibrary
 import com.example.mapasssist.SharedActivityStore
+import com.example.mapasssist.data.DncEntryCodec
 import kotlinx.coroutines.launch
 
 class TextFileViewModel(application: Application) : AndroidViewModel(application) {
@@ -18,37 +19,44 @@ class TextFileViewModel(application: Application) : AndroidViewModel(application
 
     fun insert(textFile: TextFile) = viewModelScope.launch {
         repository.insert(textFile)
-        SharedActivityStore.record(getApplication(), "Added DNC card ${textFile.mapNo} – ${textFile.title}")
+        SharedActivityStore.recordDnc(getApplication(), "added", textFile.mapNo, textFile.title)
         runCatching { FirebaseSharedLibrary.publishCard(getApplication(), textFile) }.onFailure { FirebaseSharedLibrary.queueSync(getApplication()) }
     }
 
     fun update(textFile: TextFile) = viewModelScope.launch {
         val previous = repository.getTextFileById(textFile.id)
         repository.update(textFile)
-        val detail = when {
-            previous == null -> "Modified DNC card ${textFile.mapNo} – ${textFile.title}"
-            previous.mapNo != textFile.mapNo -> "Changed DNC map number from ${previous.mapNo} to ${textFile.mapNo}"
-            previous.title != textFile.title -> "Renamed DNC card ${textFile.mapNo} from ${previous.title} to ${textFile.title}"
-            previous.entriesJson != textFile.entriesJson -> "Changed entries in DNC card ${textFile.mapNo} – ${textFile.title}"
-            else -> "Modified DNC card ${textFile.mapNo} – ${textFile.title}"
+        val action = when {
+            previous == null -> "modified"
+            previous.entriesJson != textFile.entriesJson -> when {
+                DncEntryCodec.decode(textFile.entriesJson).size > DncEntryCodec.decode(previous.entriesJson).size -> "entry added"
+                DncEntryCodec.decode(textFile.entriesJson).size < DncEntryCodec.decode(previous.entriesJson).size -> "entry removed"
+                else -> "entry modified"
+            }
+            else -> "modified"
         }
-        SharedActivityStore.record(getApplication(), detail)
+        SharedActivityStore.recordDnc(getApplication(), action, textFile.mapNo, textFile.title)
         runCatching {
-            if (previous != null && previous.mapNo != textFile.mapNo) FirebaseSharedLibrary.deleteCard(getApplication(), previous.mapNo)
-            FirebaseSharedLibrary.publishCard(getApplication(), textFile)
+            FirebaseSharedLibrary.updateCard(getApplication(), previous?.mapNo, textFile)
         }.onFailure { FirebaseSharedLibrary.queueSync(getApplication()) }
     }
 
     fun delete(textFile: TextFile) = viewModelScope.launch {
         repository.delete(textFile)
-        SharedActivityStore.record(getApplication(), "Removed DNC card ${textFile.mapNo} – ${textFile.title}")
+        SharedActivityStore.recordDnc(getApplication(), "removed", textFile.mapNo, textFile.title)
         runCatching { FirebaseSharedLibrary.deleteCard(getApplication(), textFile.mapNo) }.onFailure { FirebaseSharedLibrary.queueSync(getApplication()) }
     }
 
     fun replaceAll(textFiles: List<TextFile>) = viewModelScope.launch {
         repository.replaceAll(textFiles)
-        SharedActivityStore.record(getApplication(), "Replaced all DNC cards")
+        SharedActivityStore.record(getApplication(), "DNC cards replaced")
         runCatching { FirebaseSharedLibrary.replaceCards(getApplication(), textFiles) }.onFailure { FirebaseSharedLibrary.queueSync(getApplication()) }
+    }
+
+    /** Restores a backup locally first. The Settings screen decides whether it should replace a live library. */
+    fun restoreBackupLocally(textFiles: List<TextFile>, onComplete: () -> Unit) = viewModelScope.launch {
+        repository.replaceAll(textFiles)
+        onComplete()
     }
 
     suspend fun getTextFileById(id: Int): TextFile? {

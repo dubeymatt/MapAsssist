@@ -186,7 +186,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Keeps background sync feedback visible without turning the toolbar into a progress screen. */
     private fun updateSharedSyncPill(showStoredSuccess: Boolean = true) {
-        if (!::binding.isInitialized || (!FirebaseSharedLibrary.isConfigured(this) && FirebaseSharedLibrary.state(this) != "removed")) {
+        if (!::binding.isInitialized || (!FirebaseSharedLibrary.isConfigured(this) && FirebaseSharedLibrary.state(this) !in setOf("removed", "ended"))) {
             hideSharedSyncPill(immediate = true)
             updateSettingsSyncBadge()
             return
@@ -197,6 +197,7 @@ class MainActivity : AppCompatActivity() {
             "synced" -> if (showStoredSuccess) showSharedSyncPill("Synced", R.drawable.ic_check, AccentPreferences.primary(this), true) else hideSharedSyncPill(immediate = true)
             "failed" -> showSharedSyncPill("Sync failed", R.drawable.ic_cloud_backup, getColor(R.color.destructive), false, true, true)
             "removed" -> showSharedSyncPill("Removed from library", R.drawable.ic_logout, getColor(R.color.destructive), false, true, true)
+            "ended" -> showSharedSyncPill("Shared library ended", R.drawable.ic_logout, AccentPreferences.primary(this), true)
             "conflict" -> showSharedSyncPill("Sync needs attention", R.drawable.ic_cloud_backup, getColor(R.color.destructive), false, true, true)
             "missing" -> showSharedSyncPill("Shared file missing", R.drawable.ic_cloud_backup, getColor(R.color.destructive), false, true, true)
             else -> hideSharedSyncPill(immediate = true)
@@ -331,6 +332,15 @@ class MainActivity : AppCompatActivity() {
             .setPopExitAnim(0)
             .build())
     }
+
+    fun showLedgerTab(mapNo: String = "") {
+        if (mapNo.isNotBlank()) {
+            getSharedPreferences("map_assist", MODE_PRIVATE).edit().putString("ledger_focus_map", mapNo).apply()
+        }
+        binding.bottomNavigation.selectedItemId = R.id.navigation_ledger
+    }
+
+    fun showDncsTab() { binding.bottomNavigation.selectedItemId = R.id.navigation_dncs }
 
     private fun animateTabContent(direction: Int) {
         val content = binding.root.findViewById<View>(R.id.nav_host_fragment_content_main)

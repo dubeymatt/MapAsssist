@@ -47,6 +47,8 @@ object GoogleDriveBackup {
     private const val SHARED_DOCUMENT_LAST_SYNC_HASH = "shared_library_document_last_sync_hash"
     private val driveScope = Scope(DRIVE_SCOPE)
 
+    private fun datedBackupName() = "map_assist_dncs_${SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(java.util.Date())}.csv"
+
     data class RemoteBackup(val id: String, val modifiedTime: Long)
     data class SharedLibraryMember(val name: String, val email: String, val role: String)
 
@@ -78,6 +80,20 @@ object GoogleDriveBackup {
     /** Stops legacy periodic personal-backup jobs left behind by older app versions. */
     fun disableLegacyWeeklyBackups(context: Context) {
         WorkManager.getInstance(context).cancelUniqueWork(WEEKLY_WORK)
+        // Shared libraries now use Firebase live data.  An older CSV worker
+        // could still wake up after an upgrade and overwrite the same status
+        // preference used by the live library, so stop it and forget only its
+        // retired connection details.  Personal Drive backups are unaffected.
+        WorkManager.getInstance(context).cancelUniqueWork(SHARED_SYNC_WORK)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .remove("shared_library_file_id")
+            .remove(SHARED_DOCUMENT_URI)
+            .remove("shared_library_last_sync")
+            .remove("shared_library_auto_sync")
+            .remove("shared_library_role")
+            .remove(SHARED_LOCAL_CHANGES_PENDING)
+            .remove(SHARED_DOCUMENT_LAST_SYNC_HASH)
+            .apply()
     }
 
     fun enqueueLaunchCheck(context: Context): UUID? {
@@ -481,7 +497,7 @@ object GoogleDriveBackup {
             ?: return@withContext null
         val fileId = preferences.getString("drive_backup_file_id", null)
             ?.takeIf { drive.fileExists(it) }
-            ?: drive.findFile(BACKUP_NAME, folderId)
+            ?: drive.findLatestBackup(folderId) ?: drive.findFile(BACKUP_NAME, folderId)
             ?: return@withContext null
         val modifiedTime = drive.modifiedTime(fileId) ?: return@withContext null
         preferences.edit().putString("drive_folder_id", folderId).putString("drive_backup_file_id", fileId).apply()
@@ -520,9 +536,9 @@ object GoogleDriveBackup {
         preferences.edit().putString("drive_folder_id", folderId).apply()
         val fileId = preferences.getString("drive_backup_file_id", null)
             ?.takeIf { drive.fileExists(it) }
-            ?: drive.findFile(BACKUP_NAME, folderId)
+            ?: drive.findLatestBackup(folderId) ?: drive.findFile(BACKUP_NAME, folderId)
         val files = AppDatabase.getDatabase(context).textFileDao().getAllForBackup()
-        val updated = drive.uploadCsv(fileId, folderId, BackupCsv.create(files, LedgerStore.read(context), SharedActivityStore.read(context)))
+        val updated = drive.uploadCsv(fileId, folderId, BackupCsv.create(files, LedgerStore.read(context), SharedActivityStore.read(context)), datedBackupName())
         preferences.edit()
             .putString("drive_backup_file_id", updated)
             .putLong("drive_last_backup", System.currentTimeMillis())
@@ -553,7 +569,7 @@ object GoogleDriveBackup {
 
         val remoteId = preferences.getString("drive_backup_file_id", null)
             ?.takeIf { drive.fileExists(it) }
-            ?: drive.findFile(BACKUP_NAME, folderId)
+            ?: drive.findLatestBackup(folderId) ?: drive.findFile(BACKUP_NAME, folderId)
         val database = AppDatabase.getDatabase(context)
         val localFiles = database.textFileDao().getAllForBackup()
 
@@ -569,7 +585,7 @@ object GoogleDriveBackup {
         val drive = DriveRest(token)
         val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val remoteId = preferences.getString("drive_backup_file_id", null)
-            ?: preferences.getString("drive_folder_id", null)?.let { drive.findFile(BACKUP_NAME, it) }
+            ?: preferences.getString("drive_folder_id", null)?.let { drive.findLatestBackup(it) ?: drive.findFile(BACKUP_NAME, it) }
             ?: return@withContext false
         val remoteModified = drive.modifiedTime(remoteId) ?: return@withContext false
         val localModified = maxOf(AppDatabase.getDatabase(context).textFileDao().latestModified() ?: 0L, LedgerStore.lastModified(context))
@@ -597,6 +613,15 @@ object GoogleDriveBackup {
         fun findFile(name: String, parent: String): String? = find(
             "name='${escapeQuery(name)}' and '$parent' in parents and trashed=false"
         )
+
+        fun findLatestBackup(parent: String): String? {
+            val query = "name contains 'map_assist_dncs_' and '$parent' in parents and trashed=false"
+            val encoded = URLEncoder.encode(query, "UTF-8")
+            val response = request("GET", "https://www.googleapis.com/drive/v3/files?q=$encoded&orderBy=modifiedTime%20desc&fields=files(id)&pageSize=1", null)
+            if (response.code != 200) return null
+            val files = JSONObject(response.body).getJSONArray("files")
+            return if (files.length() == 0) null else files.getJSONObject(0).getString("id")
+        }
 
         fun createFolder(name: String): String {
             val body = JSONObject().put("name", name).put("mimeType", "application/vnd.google-apps.folder").toString().toByteArray()

@@ -47,23 +47,15 @@ object LedgerStore {
         context.getSharedPreferences("map_assist", 0).edit()
             .putString(KEY, json.toString()).putLong(MODIFIED, System.currentTimeMillis()).apply()
         if (notifySharedSync) {
-            val summary = when {
-                assignments.size > previous.size -> assignments.firstOrNull { it !in previous }?.let { added ->
-                    if (added.assignedTo.isBlank()) "Added business territory ${added.mapNo}" else "Assigned ${added.mapNo} to ${added.assignedTo}"
-                }
-                assignments.size < previous.size -> previous.firstOrNull { it !in assignments }?.let { "Deleted Ledger entry ${it.mapNo}" }
-                assignments != previous -> assignments.firstOrNull { it !in previous }?.let { changed ->
-                    val before = previous.firstOrNull { it.mapNo == changed.mapNo && it.assignedOn == changed.assignedOn }
-                    when {
-                        before?.returnedOn != changed.returnedOn && changed.returnedOn.isNotBlank() -> "Completed ${changed.mapNo} on ${changed.returnedOn}"
-                        before?.assignedTo != changed.assignedTo -> "Assigned ${changed.mapNo} to ${changed.assignedTo}"
-                        before?.notes != changed.notes -> "Changed notes for ${changed.mapNo}"
-                        else -> "Modified ledger entry ${changed.mapNo}"
-                    }
-                }
+            val change = when {
+                assignments.size > previous.size -> assignments.firstOrNull { it !in previous }?.let { "added" to it }
+                assignments.size < previous.size -> previous.firstOrNull { it !in assignments }?.let { "removed" to it }
+                assignments != previous -> assignments.firstOrNull { it !in previous }?.let { "modified" to it }
                 else -> null
             }
-            summary?.let { SharedActivityStore.record(context, it) }
+            change?.let { (action, record) ->
+                SharedActivityStore.recordLedger(context, action, record.mapNo, record.cardTitle)
+            }
             FirebaseSharedLibrary.queueSync(context)
         }
     }
